@@ -1,0 +1,13 @@
+/bin/
+/data/
+*.db
+*.db-*
+.env
+.idea/
+.vscode/
+*.exe
+*.test
+32737_2026-08-07_00.json
+aladin_stations.json
+stations_products_32737.json
+PERFORMANCE.md

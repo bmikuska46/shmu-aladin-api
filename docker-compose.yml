@@ -1,0 +1,31 @@
+services:
+  api:
+    build: .
+    container_name: shmu-weather-api
+    ports:
+      - "8080:8080"
+    environment:
+      ADDR: ":8080"
+      WEB_URL: "http://localhost:8080"
+      DATABASE_PATH: /data/shmu.db
+      STATIONS_CACHE_TTL: 168h
+      # Cron fetches ALADIN at publish+5m, retries every 5m until available
+      SYNC_FORECASTS: "true"
+      FETCH_DELAY_AFTER_PUBLISH: 5m
+      FETCH_RETRY_EVERY: 5m
+      PROBE_STATION_ID: "32737"
+      HTTP_TIMEOUT: 30s
+      RATE_LIMIT: "10"
+      RATE_LIMIT_WINDOW: 1m
+    volumes:
+      - shmu-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  shmu-data:

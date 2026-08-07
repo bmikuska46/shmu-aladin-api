@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SHMU ALADIN API — Dokumentácia</title>
+  <meta name="description" content="Dokumentácia SHMU ALADIN API — predpoveď počasia na nasledujúce 3 dni z modelu ALADIN. JSON API so stanicami a hodinovými predpoveďami pre Slovensko." />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
+  <meta name="author" content="SHMU ALADIN API" />
+  <meta name="theme-color" content="#0b6bcb" />
+  <link rel="canonical" href="__WEB_URL____DOCS_PATH__" />
+  <link rel="alternate" hreflang="sk" href="__WEB_URL__/" />
+  <link rel="alternate" hreflang="en" href="__WEB_URL__/en" />
+  <link rel="alternate" hreflang="x-default" href="__WEB_URL__/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SHMU ALADIN API" />
+  <meta property="og:title" content="SHMU ALADIN API — Dokumentácia" />
+  <meta property="og:description" content="Dokumentácia SHMU ALADIN API — predpoveď počasia na nasledujúce 3 dni z modelu ALADIN. JSON API so stanicami a hodinovými predpoveďami pre Slovensko." />
+  <meta property="og:url" content="__WEB_URL____DOCS_PATH__" />
+  <meta property="og:locale" content="sk_SK" />
+  <meta property="og:locale:alternate" content="en_US" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="SHMU ALADIN API — Dokumentácia" />
+  <meta name="twitter:description" content="Dokumentácia SHMU ALADIN API — predpoveď počasia na nasledujúce 3 dni z modelu ALADIN. JSON API so stanicami a hodinovými predpoveďami pre Slovensko." />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebAPI",
+    "name": "SHMU ALADIN API",
+    "description": "Dokumentácia SHMU ALADIN API — predpoveď počasia na nasledujúce 3 dni z modelu ALADIN. JSON API so stanicami a hodinovými predpoveďami pre Slovensko.",
+    "url": "__WEB_URL____DOCS_PATH__",
+    "documentation": "__WEB_URL____DOCS_PATH__",
+    "inLanguage": "sk",
+    "provider": {
+      "@type": "Organization",
+      "name": "SHMU ALADIN API",
+      "url": "__WEB_URL__/"
+    },
+    "about": {
+      "@type": "Thing",
+      "name": "ALADIN weather forecast"
+    }
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #ffffff;
+      --sidebar-bg: #f7f8fa;
+      --surface: #f7f8fa;
+      --border: #e3e8ef;
+      --text: #1a2332;
+      --muted: #5b6577;
+      --faint: #8b95a8;
+      --accent: #0b6bcb;
+      --accent-soft: #eef5fc;
+      --get: #0d7a45;
+      --code-bg: #0f1724;
+      --sidebar-width: 248px;
+      --header-height: 52px;
+      --content-max: 720px;
+      font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: calc(var(--header-height) + 20px); }
+    body { margin: 0; color: var(--text); background: var(--bg); font-size: 14.5px; line-height: 1.6; }
+    a { color: inherit; }
+    button, input { font: inherit; }
+    code, pre { font-family: "IBM Plex Mono", Consolas, "Liberation Mono", monospace; }
+
+    .topbar {
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 30;
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+    }
+    .brand {
+      width: var(--sidebar-width);
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 18px;
+      border-right: 1px solid var(--border);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .brand-mark {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      background: var(--accent);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .topbar-main {
+      flex: 1;
+      min-width: 0;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .breadcrumb { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+    .breadcrumb strong { color: var(--text); font-weight: 500; }
+    .version {
+      color: var(--muted);
+      font-size: 12px;
+      font-family: "IBM Plex Mono", monospace;
+    }
+    .topbar-actions { display: flex; align-items: center; gap: 14px; }
+    .language-link {
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .language-link:hover { text-decoration: underline; }
+    .menu-button { display: none; border: 0; background: transparent; padding: 6px; color: var(--text); cursor: pointer; }
+
+    .sidebar {
+      position: fixed;
+      z-index: 20;
+      top: var(--header-height);
+      bottom: 0;
+      left: 0;
+      width: var(--sidebar-width);
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--sidebar-bg);
+      padding: 18px 12px 32px;
+    }
+    .nav-label {
+      margin: 0 8px 6px;
+      color: var(--faint);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .nav-group + .nav-group { margin-top: 22px; }
+    .sidebar a {
+      display: block;
+      padding: 5px 8px;
+      border-radius: 4px;
+      color: #445064;
+      text-decoration: none;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .sidebar a:hover { background: #eceff3; color: var(--text); }
+    .sidebar a.active { background: #e4ebf3; color: var(--text); font-weight: 600; }
+    .sidebar .endpoint-link { display: flex; align-items: center; gap: 7px; font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+    .mini-method { color: var(--get); font-size: 10px; font-weight: 700; letter-spacing: 0.02em; font-family: "IBM Plex Sans", sans-serif; }
+
+    .page { margin-left: var(--sidebar-width); padding-top: var(--header-height); }
+    .layout {
+      max-width: var(--content-max);
+      margin: 0 auto;
+      padding: 36px 32px 64px;
+    }
+    main { min-width: 0; }
+
+    .docs-header { padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+    .docs-header h1 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.25;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      color: #111827;
+    }
+    .docs-header .lead {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+      max-width: 640px;
+    }
+
+    section { padding-top: 36px; }
+    section + section { margin-top: 4px; border-top: 1px solid var(--border); }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      line-height: 1.35;
+      font-weight: 650;
+      letter-spacing: -0.015em;
+      color: #111827;
+    }
+    h3 {
+      margin: 22px 0 8px;
+      font-size: 14.5px;
+      line-height: 1.4;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #111827;
+    }
+    p { margin: 0 0 12px; }
+    .muted { color: var(--muted); }
+    .inline-code {
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      background: var(--surface);
+      color: #334155;
+      font-size: 0.86em;
+    }
+
+    .note {
+      margin: 16px 0 0;
+      padding: 10px 12px;
+      border-left: 3px solid var(--accent);
+      background: var(--accent-soft);
+      color: #2f4d6b;
+      font-size: 13.5px;
+    }
+    .note strong { color: #163a5c; }
+
+    .quick-table { width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 13.5px; }
+    .quick-table th, .quick-table td { padding: 9px 12px; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+    .quick-table th { width: 130px; background: var(--surface); color: #475569; font-weight: 600; }
+
+    .endpoint { margin-top: 14px; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .endpoint-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .method { min-width: 36px; color: var(--get); font-size: 11px; font-weight: 700; letter-spacing: 0.03em; }
+    .path { color: #1e293b; font-size: 12.5px; font-weight: 500; overflow-wrap: anywhere; }
+    .endpoint-body { padding: 12px; color: var(--muted); font-size: 13.5px; }
+    .endpoint-body p:last-child { margin-bottom: 0; }
+    .params { width: 100%; margin: 10px 0 0; border-collapse: collapse; }
+    .params th {
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      color: var(--faint);
+      font-size: 11px;
+      font-weight: 600;
+      text-align: left;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .params td { padding: 7px 8px; border-bottom: 1px solid #edf1f5; vertical-align: top; }
+    .params tr:last-child td { border-bottom: 0; }
+    .params td:first-child { width: 124px; color: var(--text); }
+
+    .code-block {
+      position: relative;
+      margin: 8px 0 0;
+      border: 1px solid #1c2738;
+      border-radius: 4px;
+      background: var(--code-bg);
+      overflow: hidden;
+    }
+    .code-label {
+      padding: 6px 12px;
+      border-bottom: 1px solid #243044;
+      color: #8d9bb0;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    pre { margin: 0; padding: 12px 14px; overflow-x: auto; color: #dbe5f3; font-size: 12px; line-height: 1.6; }
+    .copy-button {
+      position: absolute;
+      top: 5px;
+      right: 6px;
+      padding: 1px 7px;
+      border: 1px solid #3b485b;
+      border-radius: 3px;
+      background: #1b2636;
+      color: #aebacf;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .copy-button:hover { color: white; border-color: #5b697d; }
+
+    @media (max-width: 760px) {
+      :root { --header-height: 48px; }
+      .brand { width: auto; flex: 1; border-right: 0; padding: 0 14px; }
+      .topbar-main { flex: 0; padding: 0 10px; }
+      .breadcrumb, .version { display: none; }
+      .menu-button { display: block; }
+      .sidebar {
+        transform: translateX(-100%);
+        width: min(280px, 86vw);
+        transition: transform 140ms ease;
+        box-shadow: 6px 0 20px rgba(15, 23, 42, 0.08);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .page { margin-left: 0; }
+      .layout { display: block; padding: 28px 18px 48px; }
+      section { padding-top: 28px; }
+      .docs-header h1 { font-size: 22px; }
+      .quick-table th { width: 108px; }
+      .endpoint-head { align-items: flex-start; }
+      .params { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a href="__DOCS_PATH__" class="brand" aria-label="SHMU ALADIN API dokumentácia">
+      <span class="brand-mark">SK</span>
+      <span>SHMU ALADIN API</span>
+    </a>
+    <div class="topbar-main">
+      <div class="breadcrumb">Dokumentácia&nbsp; / &nbsp;<strong>API referencia</strong></div>
+      <div class="topbar-actions">
+        <a class="language-link" href="__LANG_PATH__" hreflang="__LANG_CODE__" aria-label="__LANG_ARIA__">__LANG_LABEL__</a>
+        <div class="version">v1</div>
+      </div>
+      <button class="menu-button" type="button" aria-label="Otvoriť navigáciu" aria-expanded="false" aria-controls="docs-nav">
+        <span aria-hidden="true">☰</span>
+      </button>
+    </div>
+  </header>
+
+  <aside class="sidebar" id="docs-nav" aria-label="Dokumentácia">
+    <div class="nav-group">
+      <p class="nav-label">Začíname</p>
+      <a class="active" href="#overview">Prehľad</a>
+      <a href="#quickstart">Rýchly štart</a>
+      <a href="#limits">Limity a aktualizácie</a>
+    </div>
+    <div class="nav-group">
+      <p class="nav-label">API referencia</p>
+      <a class="endpoint-link" href="#stations"><span class="mini-method">GET</span><span>/stations</span></a>
+      <a class="endpoint-link" href="#station-detail"><span class="mini-method">GET</span><span>/stations/{id}</span></a>
+      <a class="endpoint-link" href="#forecast"><span class="mini-method">GET</span><span>/forecast</span></a>
+    </div>
+    <div class="nav-group">
+      <p class="nav-label">Príklady</p>
+      <a href="#examples">curl a PowerShell</a>
+      <a href="#response">Formát odpovede</a>
+    </div>
+  </aside>
+
+  <div class="page">
+    <div class="layout">
+      <main>
+        <div class="docs-header" id="overview">
+          <h1>SHMU ALADIN API</h1>
+          <p class="lead">JSON API nad dátami numerického modelu ALADIN. Vyhľadávanie staníc a hodinové predpovede na nasledujúce 3 dni.</p>
+        </div>
+
+        <section id="quickstart">
+          <h2>Rýchly štart</h2>
+          <p>Služba sťahuje dáta zo SHMÚ a sprístupňuje ich cez HTTP. Základná adresa API:</p>
+          <div class="code-block">
+            <div class="code-label">Base URL</div>
+            <button class="copy-button" type="button">Kopírovať</button>
+            <pre><code>__WEB_URL__</code></pre>
+          </div>
+          <table class="quick-table">
+            <tbody>
+              <tr><th>Stanice</th><td>Viac ako 1 000 lokalít. Vyhľadávanie funguje aj bez diakritiky.</td></tr>
+              <tr><th>Predpoveď</th><td>Hodinové kroky na nasledujúce 3 dni (horizont modelu ALADIN): teplota, vietor, oblačnosť, zrážky a tlak.</td></tr>
+            </tbody>
+          </table>
+          <div class="note"><strong>Tip:</strong> Vyhľadávanie je bez diakritiky — <code class="inline-code">zilina</code> nájde aj „Žilina“.</div>
+        </section>
+
+        <section id="reference">
+          <h2>Endpointy</h2>
+          <p class="muted">Všetky endpointy používajú metódu GET. Chybové odpovede majú tvar <code class="inline-code">{"code": 400, "message": "…"}</code>.</p>
+
+          <article class="endpoint" id="stations">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/stations</code></div>
+            <div class="endpoint-body">
+              <p>Zoznam staníc so stránkovaním a vyhľadávaním.</p>
+              <table class="params">
+                <thead><tr><th>Parameter</th><th>Popis</th></tr></thead>
+                <tbody>
+                  <tr><td><code>q</code>, <code>search</code></td><td>Textový filter, podporuje vyhľadávanie bez diakritiky.</td></tr>
+                  <tr><td><code>page</code></td><td>Číslo stránky. Predvolená hodnota je 1.</td></tr>
+                  <tr><td><code>page_size</code>, <code>limit</code></td><td>Veľkosť stránky. Predvolená hodnota je 50, maximum 200.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="endpoint" id="station-detail">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/stations/{id}</code></div>
+            <div class="endpoint-body">Detail stanice podľa ID. Napríklad <code class="inline-code">32737</code> označuje Bratislavu centrum.</div>
+          </article>
+
+          <article class="endpoint" id="forecast">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/forecast?station={id}</code></div>
+            <div class="endpoint-body">
+              <p>Najnovšia predpoveď ALADIN na nasledujúce 3 dni. Voliteľný parameter <code class="inline-code">cnt</code> určuje počet hodinových krokov.</p>
+              <p>Alias: <code class="inline-code">/api/v1/weather?station={id}</code></p>
+            </div>
+          </article>
+        </section>
+
+        <section id="examples">
+          <h2>Príklady použitia</h2>
+          <p class="muted">Všetky príklady používajú vyššie uvedenú základnú adresu.</p>
+
+          <h3>Vyhľadanie staníc</h3>
+          <div class="code-block">
+            <div class="code-label">curl</div>
+            <button class="copy-button" type="button">Kopírovať</button>
+            <pre><code>curl "__WEB_URL__/api/v1/stations?q=zilina&amp;page_size=5"</code></pre>
+          </div>
+
+          <h3>PowerShell</h3>
+          <div class="code-block">
+            <div class="code-label">PowerShell</div>
+            <button class="copy-button" type="button">Kopírovať</button>
+            <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/stations?q=bratislava&amp;page_size=3" |
+  ConvertTo-Json -Depth 5</code></pre>
+          </div>
+
+          <h3>Predpoveď pre Bratislavu</h3>
+          <div class="code-block">
+            <div class="code-label">curl · prvých 6 hodín</div>
+            <button class="copy-button" type="button">Kopírovať</button>
+            <pre><code>curl "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6"</code></pre>
+          </div>
+        </section>
+
+        <section id="response">
+          <h2>Formát odpovede</h2>
+          <p class="muted">Skrátená ukážka odpovede predpovede:</p>
+          <div class="code-block">
+            <div class="code-label">JSON</div>
+            <button class="copy-button" type="button">Kopírovať</button>
+            <pre><code>{
+  "code": "200",
+  "cnt": 2,
+  "list": [
+    {
+      "dt": 1786082400,
+      "dt_txt": "2026-08-07 06:00:00",
+      "main": { "temp": 25.82, "pressure": 1016.9 },
+      "wind": { "speed": 3.94, "deg": 316.6 },
+      "clouds": { "all": 97.2 },
+      "weather": [
+        { "id": 804, "main": "Clouds", "description": "overcast clouds" }
+      ]
+    }
+  ],
+  "city": {
+    "id": 32737,
+    "name": "Bratislava (centrum)",
+    "coord": { "lat": 48.156, "lon": 17.105 },
+    "country": "SK"
+  },
+  "meta": {
+    "model": "ALADIN SHMU/SK 4.5km …",
+    "source": "SHMU ALADIN",
+    "runtime": "2026-08-07T06:00:00Z"
+  }
+}</code></pre>
+          </div>
+        </section>
+
+        <section id="limits">
+          <h2>Limity a aktualizácie</h2>
+          <h3>Obmedzenie požiadaviek</h3>
+          <p>Predvolený limit je <strong>10 požiadaviek za minútu</strong> pre každý endpoint a IP adresu. Pri prekročení API vráti stav <code class="inline-code">429</code> a hlavičku <code class="inline-code">Retry-After</code>. Dokumentácia nie je limitovaná.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const menuButton = document.querySelector('.menu-button');
+    const sidebar = document.querySelector('.sidebar');
+
+    menuButton.addEventListener('click', () => {
+      const open = sidebar.classList.toggle('open');
+      menuButton.setAttribute('aria-expanded', String(open));
+    });
+
+    sidebar.addEventListener('click', (event) => {
+      if (event.target.closest('a') && window.innerWidth <= 760) {
+        sidebar.classList.remove('open');
+        menuButton.setAttribute('aria-expanded', 'false');
+      }
+    });
+
+    document.querySelectorAll('.copy-button').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const code = button.parentElement.querySelector('code').textContent;
+        try {
+          await navigator.clipboard.writeText(code);
+          button.textContent = 'Skopírované';
+          window.setTimeout(() => { button.textContent = 'Kopírovať'; }, 1400);
+        } catch (_) {
+          button.textContent = 'Označte text';
+        }
+      });
+    });
+  </script>
+</body>
+</html>

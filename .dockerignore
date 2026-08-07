@@ -1,0 +1,12 @@
+bin/
+data/
+*.db
+*.db-*
+.git/
+.gitignore
+*.md
+*.json
+.env
+.idea/
+.vscode/
+**/testdata/
