@@ -47,6 +47,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /robots.txt", s.handleRobotsTxt)
 	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+	s.mux.HandleFunc("GET /api/v1", s.handleAPIIndex)
+	s.mux.HandleFunc("GET /api/v1/{$}", s.handleAPIIndex)
 	s.mux.HandleFunc("GET /api/v1/stations", s.handleListStations)
 	s.mux.HandleFunc("GET /api/v1/stations/{id}", s.handleGetStation)
 	s.mux.HandleFunc("GET /api/v1/forecast", s.handleForecast)
@@ -84,6 +86,38 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	write(w, r, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request) {
+	base := strings.TrimRight(s.webURL, "/")
+	write(w, r, http.StatusOK, map[string]any{
+		"name":          "SHMU ALADIN API",
+		"version":       "v1",
+		"base_url":      base + "/api/v1",
+		"documentation": base + "/",
+		"endpoints": []map[string]string{
+			{
+				"method":      "GET",
+				"path":        "/api/v1/stations",
+				"description": "Paginated station list with search",
+			},
+			{
+				"method":      "GET",
+				"path":        "/api/v1/stations/{id}",
+				"description": "Single station by ID",
+			},
+			{
+				"method":      "GET",
+				"path":        "/api/v1/forecast?station={id}",
+				"description": "Latest ALADIN forecast for the next 3 days",
+			},
+			{
+				"method":      "GET",
+				"path":        "/api/v1/weather?station={id}",
+				"description": "Alias of /api/v1/forecast",
+			},
+		},
+	})
 }
 
 func (s *Server) handleListStations(w http.ResponseWriter, r *http.Request) {

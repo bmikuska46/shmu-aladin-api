@@ -121,6 +121,7 @@ var englishDocsReplacer = strings.NewReplacer(
 	`<strong>Tip:</strong> Vyhľadávanie je bez diakritiky — <code class="inline-code">zilina</code> nájde aj „Žilina“.`, `<strong>Tip:</strong> Search is diacritic-insensitive — <code class="inline-code">zilina</code> also matches “Žilina”.`,
 	`Endpointy`, `Endpoints`,
 	`Všetky endpointy používajú metódu GET. Chybové odpovede majú tvar`, `All endpoints use the GET method. Error responses have the following shape:`,
+	`Zoznam dostupných endpointov API (JSON).`, `List of available API endpoints (JSON).`,
 	`Zoznam staníc so stránkovaním a vyhľadávaním.`, `A paginated, searchable list of stations.`,
 	`Popis`, `Description`,
 	`Textový filter, podporuje vyhľadávanie bez diakritiky.`, `Text filter with diacritic-insensitive search.`,

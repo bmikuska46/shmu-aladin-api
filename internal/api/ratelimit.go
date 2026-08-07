@@ -101,6 +101,8 @@ func routeBucketKey(r *http.Request) string {
 		return "GET /sitemap.xml"
 	case path == "/health":
 		return "GET /health"
+	case path == "/api/v1" || path == "/api/v1/":
+		return "GET /api/v1"
 	case path == "/api/v1/stations":
 		return "GET /api/v1/stations"
 	case strings.HasPrefix(path, "/api/v1/stations/"):

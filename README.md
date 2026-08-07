@@ -40,6 +40,7 @@ Slovenská dokumentácia je dostupná na `/` a `/docs`. Anglická verzia je na `
 | Metóda | Cesta | Popis |
 |--------|------|--------|
 | `GET` | `/health` | Kontrola dostupnosti |
+| `GET` | `/api/v1` | Zoznam dostupných endpointov |
 | `GET` | `/api/v1/stations` | Stránkovaný zoznam staníc a vyhľadávanie |
 | `GET` | `/api/v1/stations/{id}` | Detail stanice |
 | `GET` | `/api/v1/forecast?station={id}` | Najnovšia predpoveď ALADIN na 3 dni v štruktúre podobnej OWM |

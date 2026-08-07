@@ -24,6 +24,7 @@ func TestDocumentationLocales(t *testing.T) {
 				`<html lang="sk">`,
 				`<h2>Rýchly štart</h2>`,
 				`href="/en"`,
+				`<pre><code>https://weather.example/api/v1</code></pre>`,
 				`https://weather.example/api/v1/stations`,
 				`<link rel="canonical" href="https://weather.example/" />`,
 				`<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />`,

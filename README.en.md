@@ -40,6 +40,7 @@ Slovak documentation is available at `/` and `/docs`. The English version is at 
 | Method | Path | Notes |
 |--------|------|--------|
 | `GET` | `/health` | Liveness |
+| `GET` | `/api/v1` | List of available endpoints |
 | `GET` | `/api/v1/stations` | Paginated station list + search |
 | `GET` | `/api/v1/stations/{id}` | Single station |
 | `GET` | `/api/v1/forecast?station={id}` | Latest ALADIN forecast, next 3 days (OWM-like) |

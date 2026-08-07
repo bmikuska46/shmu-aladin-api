@@ -345,6 +345,7 @@
     </div>
     <div class="nav-group">
       <p class="nav-label">API referencia</p>
+      <a class="endpoint-link" href="#api-root"><span class="mini-method">GET</span><span>/</span></a>
       <a class="endpoint-link" href="#stations"><span class="mini-method">GET</span><span>/stations</span></a>
       <a class="endpoint-link" href="#station-detail"><span class="mini-method">GET</span><span>/stations/{id}</span></a>
       <a class="endpoint-link" href="#forecast"><span class="mini-method">GET</span><span>/forecast</span></a>
@@ -370,7 +371,7 @@
           <div class="code-block">
             <div class="code-label">Base URL</div>
             <button class="copy-button" type="button">Kopírovať</button>
-            <pre><code>__WEB_URL__</code></pre>
+            <pre><code>__WEB_URL__/api/v1</code></pre>
           </div>
           <table class="quick-table">
             <tbody>
@@ -384,6 +385,11 @@
         <section id="reference">
           <h2>Endpointy</h2>
           <p class="muted">Všetky endpointy používajú metódu GET. Chybové odpovede majú tvar <code class="inline-code">{"code": 400, "message": "…"}</code>.</p>
+
+          <article class="endpoint" id="api-root">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1</code></div>
+            <div class="endpoint-body">Zoznam dostupných endpointov API (JSON).</div>
+          </article>
 
           <article class="endpoint" id="stations">
             <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/stations</code></div>
