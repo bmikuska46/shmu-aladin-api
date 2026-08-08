@@ -8,7 +8,7 @@ type Station struct {
 	Name         string   `json:"name" xml:"name"`
 	Lat          float64  `json:"lat" xml:"lat"`
 	Lon          float64  `json:"lon" xml:"lon"`
-	DistrictCode int      `json:"district_code" xml:"district_code"`
+	DistrictCode int      `json:"-" xml:"-"` // kept for SHMU sync / DB only
 }
 
 type StationList struct {
@@ -40,14 +40,13 @@ type ForecastResponse struct {
 	XMLName struct{}       `json:"-" xml:"forecast"`
 	Code    string         `json:"code" xml:"code"`
 	Message float64        `json:"message" xml:"message"`
-	Cnt     int            `json:"cnt" xml:"cnt"`
+	Hours   int            `json:"hours" xml:"hours"`
 	List    []ForecastItem `json:"list" xml:"list>item"`
 	City    ForecastCity   `json:"city" xml:"city"`
 	Meta    ForecastMeta   `json:"meta" xml:"meta"`
 }
 
 type ForecastCity struct {
-	ID        int64    `json:"id" xml:"id"`
 	Name      string   `json:"name" xml:"name"`
 	Coord     Coord    `json:"coord" xml:"coord"`
 	Country   string   `json:"country" xml:"country"`
@@ -102,6 +101,7 @@ type DailyForecastResponse struct {
 
 type DailyForecastDay struct {
 	Date               string      `json:"date"`
+	DateIndex          int         `json:"date_index"` // 0=Monday … 6=Sunday (Europe/Bratislava)
 	TempMin            *float64    `json:"temp_min"`
 	TempMax            *float64    `json:"temp_max"`
 	PrecipitationTotal *float64    `json:"precipitation_total"`
@@ -145,14 +145,16 @@ type Indicator struct {
 }
 
 type ForecastItem struct {
-	DT      int64          `json:"dt" xml:"dt"`
-	DTTxt   string         `json:"dt_txt" xml:"dt_txt"`
-	Main    ForecastMain   `json:"main" xml:"main"`
-	Weather []WeatherCond  `json:"weather" xml:"weather>condition"`
-	Clouds  ForecastClouds `json:"clouds" xml:"clouds"`
-	Wind    ForecastWind   `json:"wind" xml:"wind"`
-	Rain    *Precip1h      `json:"rain,omitempty" xml:"rain,omitempty"`
-	Snow    *Precip1h      `json:"snow,omitempty" xml:"snow,omitempty"`
+	DT        int64          `json:"dt" xml:"dt"`
+	DTTxt     string         `json:"dt_txt" xml:"dt_txt"`
+	Date      string         `json:"date" xml:"date"`             // local YYYY-MM-DD (Europe/Bratislava)
+	DateIndex int            `json:"date_index" xml:"date_index"` // 0=Monday … 6=Sunday
+	Main      ForecastMain   `json:"main" xml:"main"`
+	Weather   []WeatherCond  `json:"weather" xml:"weather>condition"`
+	Clouds    ForecastClouds `json:"clouds" xml:"clouds"`
+	Wind      ForecastWind   `json:"wind" xml:"wind"`
+	Rain      *Precip1h      `json:"rain,omitempty" xml:"rain,omitempty"`
+	Snow      *Precip1h      `json:"snow,omitempty" xml:"snow,omitempty"`
 }
 
 type ForecastMain struct {
@@ -178,13 +180,6 @@ type ForecastWind struct {
 
 type Precip1h struct {
 	H1 float64 `json:"1h" xml:"h1"`
-}
-
-type WeatherCond struct {
-	ID          int    `json:"id" xml:"id,attr"`
-	Main        string `json:"main" xml:"main,attr"`
-	Description string `json:"description" xml:"description,attr"`
-	Icon        string `json:"icon" xml:"icon,attr"`
 }
 
 type APIError struct {

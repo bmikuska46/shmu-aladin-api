@@ -3,7 +3,6 @@ package transform
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"time"
 
 	"github.com/bmikuska/shmu-weather-api/internal/geo"
@@ -13,11 +12,10 @@ import (
 
 // ForecastRenderVersion is bumped when ToOWMForecast output semantics change so
 // stored current_forecasts rows are rebuilt from raw ALADIN payloads.
-const ForecastRenderVersion = "2"
+const ForecastRenderVersion = "3"
 
 // ToOWMForecast converts SHMU ALADIN time series into an OpenWeatherMap-like forecast.
 func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastResponse, error) {
-	id, _ := strconv.ParseInt(raw.SIID, 10, 64)
 	lat, _ := shmu.ParseFloat(raw.Lat)
 	lon, _ := shmu.ParseFloat(raw.Lon)
 
@@ -44,13 +42,11 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 	snow := indexSeries(raw.Snowfall)
 
 	for _, ts := range timestamps {
-		dayIcon := "d"
-		if !geo.IsDaytime(ts, lat, lon) {
-			dayIcon = "n"
-		}
 		item := model.ForecastItem{
-			DT:    ts,
-			DTTxt: time.Unix(ts, 0).UTC().Format("2006-01-02 15:04:05"),
+			DT:        ts,
+			DTTxt:     time.Unix(ts, 0).UTC().Format("2006-01-02 15:04:05"),
+			Date:      geo.LocalDateString(ts),
+			DateIndex: geo.DateIndex(ts),
 			Main: model.ForecastMain{
 				Temp:     temp[ts],
 				TempMin:  tempMin[ts],
@@ -69,7 +65,7 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 				Deg:   windDeg[ts],
 				Gust:  windGust[ts],
 			},
-			Weather: deriveWeather(rain[ts], snow[ts], cloudsAll[ts], dayIcon),
+			Weather: deriveWeather(rain[ts], snow[ts], cloudsAll[ts]),
 		}
 		// Include zero values when the source series has a reading so daily
 		// aggregation can distinguish missing from true zeroes.
@@ -95,10 +91,9 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 	return model.ForecastResponse{
 		Code:    "200",
 		Message: 0,
-		Cnt:     len(items),
+		Hours:   len(items),
 		List:    items,
 		City: model.ForecastCity{
-			ID:        id,
 			Name:      raw.LocationName,
 			Coord:     model.Coord{Lat: lat, Lon: lon},
 			Country:   "SK",
@@ -147,7 +142,7 @@ func indexSeries(s shmu.Series) map[int64]*float64 {
 	return out
 }
 
-func deriveWeather(rain, snow, clouds *float64, dayIcon string) []model.WeatherCond {
+func deriveWeather(rain, snow, clouds *float64) []model.WeatherCond {
 	r := 0.0
 	s := 0.0
 	c := 0.0
@@ -161,32 +156,30 @@ func deriveWeather(rain, snow, clouds *float64, dayIcon string) []model.WeatherC
 		c = *clouds
 	}
 
-	withIcon := func(id int, main, desc, iconBase string) []model.WeatherCond {
-		return []model.WeatherCond{{ID: id, Main: main, Description: desc, Icon: iconBase + dayIcon}}
-	}
-
+	var code model.WeatherCode
 	switch {
 	case s > 0 && r > 0:
-		return withIcon(616, "Snow", "rain and snow", "13")
+		code = model.WeatherRainAndSnow
 	case s > 0:
-		return withIcon(600, "Snow", "light snow", "13")
+		code = model.WeatherLightSnow
 	case r >= 7.5:
-		return withIcon(502, "Rain", "heavy intensity rain", "10")
+		code = model.WeatherHeavyRain
 	case r >= 2.5:
-		return withIcon(501, "Rain", "moderate rain", "10")
+		code = model.WeatherModerateRain
 	case r > 0:
-		return withIcon(500, "Rain", "light rain", "10")
+		code = model.WeatherLightRain
 	case c >= 85:
-		return withIcon(804, "Clouds", "overcast clouds", "04")
+		code = model.WeatherOvercastClouds
 	case c >= 51:
-		return withIcon(803, "Clouds", "broken clouds", "04")
+		code = model.WeatherBrokenClouds
 	case c >= 25:
-		return withIcon(802, "Clouds", "scattered clouds", "03")
+		code = model.WeatherScatteredClouds
 	case c > 0:
-		return withIcon(801, "Clouds", "few clouds", "02")
+		code = model.WeatherFewClouds
 	default:
-		return withIcon(800, "Clear", "clear sky", "01")
+		code = model.WeatherClear
 	}
+	return []model.WeatherCond{code.Cond()}
 }
 
 func round3(v float64) float64 {

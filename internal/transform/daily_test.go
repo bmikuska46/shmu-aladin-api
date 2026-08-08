@@ -32,10 +32,10 @@ func TestAggregateDailyBasics(t *testing.T) {
 			Wind:    model.ForecastWind{Speed: f64(5), Gust: f64(8 + float64(i)*0.1)},
 			Rain:    &model.Precip1h{H1: rain},
 			Snow:    &model.Precip1h{H1: 0},
-			Weather: []model.WeatherCond{{ID: 800, Main: "Clear", Description: "clear sky", Icon: "01d"}},
+			Weather: []model.WeatherCond{model.WeatherClear.Cond()},
 		})
 		if rain > 0 {
-			items[i].Weather = []model.WeatherCond{{ID: 500, Main: "Rain", Description: "light rain", Icon: "10d"}}
+			items[i].Weather = []model.WeatherCond{model.WeatherLightRain.Cond()}
 		}
 	}
 
@@ -51,6 +51,10 @@ func TestAggregateDailyBasics(t *testing.T) {
 	d := daily.List[0]
 	if d.Date != "2026-08-08" {
 		t.Fatalf("date=%s", d.Date)
+	}
+	// 2026-08-08 is a Saturday → index 5
+	if d.DateIndex != 5 {
+		t.Fatalf("date_index=%d want 5", d.DateIndex)
 	}
 	if d.TempMin == nil || *d.TempMin != 19 {
 		t.Fatalf("temp_min=%v", d.TempMin)
@@ -70,8 +74,8 @@ func TestAggregateDailyBasics(t *testing.T) {
 	if d.Sunrise == "" || d.Sunset == "" {
 		t.Fatal("expected sunrise/sunset")
 	}
-	if d.Weather.ID != 500 {
-		t.Fatalf("representative weather=%d", d.Weather.ID)
+	if d.Weather.Code != model.WeatherLightRain {
+		t.Fatalf("representative weather=%s", d.Weather.Code)
 	}
 }
 
@@ -82,7 +86,7 @@ func TestAggregateDailyPartialAndMissing(t *testing.T) {
 			DT:   ts,
 			Main: model.ForecastMain{Temp: f64(25)},
 			// no rain/snow → precipitation fields stay null
-			Weather: []model.WeatherCond{{ID: 800, Main: "Clear", Description: "clear sky", Icon: "01d"}},
+			Weather: []model.WeatherCond{model.WeatherClear.Cond()},
 		}},
 		City: model.ForecastCity{Coord: model.Coord{Lat: 48.15, Lon: 17.11}},
 	}
@@ -107,7 +111,7 @@ func TestAggregateDailyDSTSpringForward(t *testing.T) {
 			Main:    model.ForecastMain{Temp: f64(5)},
 			Rain:    &model.Precip1h{H1: 0},
 			Snow:    &model.Precip1h{H1: 0},
-			Weather: []model.WeatherCond{{ID: 800, Main: "Clear", Description: "clear sky", Icon: "01d"}},
+			Weather: []model.WeatherCond{model.WeatherClear.Cond()},
 		})
 	}
 	if len(items) != 23 {

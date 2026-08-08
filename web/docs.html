@@ -361,6 +361,7 @@
       <a class="endpoint-link" href="#station-detail"><span class="mini-method">GET</span><span>/stations/{id}</span></a>
       <a class="endpoint-link" href="#forecast"><span class="mini-method">GET</span><span>/forecast</span></a>
       <a class="endpoint-link" href="#forecast-daily"><span class="mini-method">GET</span><span>/forecast/daily</span></a>
+      <a class="endpoint-link" href="#weather-codes"><span class="mini-method">GET</span><span>/weather/codes</span></a>
       <a class="endpoint-link" href="#indicators"><span class="mini-method">GET</span><span>/indicators</span></a>
     </div>
   </aside>
@@ -461,8 +462,7 @@
       "id": 32801,
       "name": "Žilina",
       "lat": 49.223,
-      "lon": 18.739,
-      "district_code": 511
+      "lon": 18.739
     }
   ],
   "total": 1,
@@ -497,8 +497,7 @@
   "id": 32737,
   "name": "Bratislava (centrum)",
   "lat": 48.156,
-  "lon": 17.105,
-  "district_code": 102
+  "lon": 17.105
 }</code></pre>
               </div>
             </div>
@@ -507,7 +506,7 @@
           <article class="endpoint" id="forecast">
             <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/forecast</code></div>
             <div class="endpoint-body">
-              <p>Najnovšia predpoveď ALADIN na nasledujúce 3 dni. Zadajte buď <code class="inline-code">station</code> (ID stanice), alebo <code class="inline-code">lat</code> a <code class="inline-code">lon</code> (najbližšia stanica). Voliteľný parameter <code class="inline-code">cnt</code> určuje počet hodinových krokov.</p>
+              <p>Najnovšia predpoveď ALADIN na nasledujúce 3 dni. Zadajte buď <code class="inline-code">station</code> (ID stanice), alebo <code class="inline-code">lat</code> a <code class="inline-code">lon</code> (najbližšia stanica). Voliteľný parameter <code class="inline-code">hours</code> určuje počet hodinových krokov.</p>
               <p>Pri súradniciach odpoveď obsahuje <code class="inline-code">location_match</code> (vzdialenosť a nadmorská výška stanice). Voliteľne <code class="inline-code">max_distance_km</code> (max. 500) odmietne príliš vzdialenú zhodu.</p>
               <p>Alias: <code class="inline-code">/api/v1/weather</code> s rovnakými parametrami.</p>
               <table class="params">
@@ -516,19 +515,19 @@
                   <tr><td><code>station</code></td><td>ID stanice. Alternatíva k <code class="inline-code">lat</code> + <code class="inline-code">lon</code>.</td></tr>
                   <tr><td><code>lat</code></td><td>Zemepisná šírka (−90 až 90). Použite spolu s <code class="inline-code">lon</code>.</td></tr>
                   <tr><td><code>lon</code></td><td>Zemepisná dĺžka (−180 až 180). Použite spolu s <code class="inline-code">lat</code>.</td></tr>
-                  <tr><td><code>cnt</code></td><td>Počet hodinových krokov v odpovedi.</td></tr>
+                  <tr><td><code>hours</code></td><td>Počet hodinových krokov v odpovedi.</td></tr>
                   <tr><td><code>max_distance_km</code></td><td>Maximálna vzdialenosť k najbližšej stanici (iba s lat/lon).</td></tr>
                 </tbody>
               </table>
               <div class="code-block">
                 <div class="code-label">curl</div>
                 <button class="copy-button" type="button">Kopírovať</button>
-                <pre><code>curl "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6"</code></pre>
+                <pre><code>curl "__WEB_URL__/api/v1/forecast?station=32737&amp;hours=6"</code></pre>
               </div>
               <div class="code-block">
                 <div class="code-label">PowerShell</div>
                 <button class="copy-button" type="button">Kopírovať</button>
-                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6" |
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/forecast?station=32737&amp;hours=6" |
   ConvertTo-Json -Depth 6</code></pre>
               </div>
               <div class="code-block">
@@ -536,21 +535,22 @@
                 <button class="copy-button" type="button">Kopírovať</button>
                 <pre><code>{
   "code": "200",
-  "cnt": 2,
+  "hours": 2,
   "list": [
     {
       "dt": 1786082400,
       "dt_txt": "2026-08-07 06:00:00",
+      "date": "2026-08-07",
+      "date_index": 4,
       "main": { "temp": 25.82, "pressure": 1016.9 },
       "wind": { "speed": 3.94, "deg": 316.6 },
       "clouds": { "all": 97.2 },
       "weather": [
-        { "id": 804, "main": "Clouds", "description": "overcast clouds", "icon": "04d" }
+        { "code": "overcast_clouds", "description": "overcast clouds" }
       ]
     }
   ],
   "city": {
-    "id": 32737,
     "name": "Bratislava (centrum)",
     "coord": { "lat": 48.156, "lon": 17.105 },
     "country": "SK"
@@ -597,6 +597,7 @@
   "list": [
     {
       "date": "2026-08-07",
+      "date_index": 4,
       "temp_min": 18.4,
       "temp_max": 27.1,
       "precipitation_total": 1.2,
@@ -607,10 +608,8 @@
       "wind_gust_max": 19.4,
       "cloud_cover_mean": 62.5,
       "weather": {
-        "id": 500,
-        "main": "Rain",
-        "description": "light rain",
-        "icon": "10d"
+        "code": "light_rain",
+        "description": "light rain"
       },
       "sunrise": "2026-08-07T05:32:00+02:00",
       "sunset": "2026-08-07T20:11:00+02:00",
@@ -618,11 +617,46 @@
     }
   ],
   "city": {
-    "id": 32737,
     "name": "Bratislava (centrum)",
     "coord": { "lat": 48.156, "lon": 17.105 },
     "country": "SK"
   }
+}</code></pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint" id="weather-codes">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/weather/codes</code></div>
+            <div class="endpoint-body">
+              <p>Katalóg enumov počasia. Každá položka má stabilný <code class="inline-code">code</code> a ľudsky čitateľný <code class="inline-code">description</code>. Rovnaké hodnoty vracia aj pole <code class="inline-code">weather</code> v hodinovej a dennej predpovedi. Index dňa <code class="inline-code">date_index</code> je 0 = pondelok … 6 = nedeľa (Europe/Bratislava).</p>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/weather/codes"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/weather/codes" |
+  ConvertTo-Json -Depth 5</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "codes": [
+    { "code": "clear", "description": "clear sky" },
+    { "code": "few_clouds", "description": "few clouds" },
+    { "code": "scattered_clouds", "description": "scattered clouds" },
+    { "code": "broken_clouds", "description": "broken clouds" },
+    { "code": "overcast_clouds", "description": "overcast clouds" },
+    { "code": "light_rain", "description": "light rain" },
+    { "code": "moderate_rain", "description": "moderate rain" },
+    { "code": "heavy_rain", "description": "heavy intensity rain" },
+    { "code": "light_snow", "description": "light snow" },
+    { "code": "rain_and_snow", "description": "rain and snow" }
+  ]
 }</code></pre>
               </div>
             </div>

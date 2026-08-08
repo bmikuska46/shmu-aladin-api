@@ -64,6 +64,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/forecast", s.handleForecast)
 	s.mux.HandleFunc("GET /api/v1/forecast/daily", s.handleDailyForecast)
 	s.mux.HandleFunc("GET /api/v1/weather", s.handleForecast) // alias
+	s.mux.HandleFunc("GET /api/v1/weather/codes", s.handleWeatherCodes)
 	s.mux.HandleFunc("GET /api/v1/indicators", s.handleIndicators)
 }
 
@@ -132,6 +133,11 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request) {
 				"method":      "GET",
 				"path":        "/api/v1/weather?station={id}|lat={lat}&lon={lon}",
 				"description": "Alias of /api/v1/forecast",
+			},
+			{
+				"method":      "GET",
+				"path":        "/api/v1/weather/codes",
+				"description": "Catalog of weather condition codes and descriptions",
 			},
 			{
 				"method":      "GET",
@@ -212,22 +218,22 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cnt, ok, cntMsg := parseOptionalCnt(r.URL.Query().Get("cnt"))
+	hours, ok, hoursMsg := parseOptionalHours(r.URL.Query().Get("hours"))
 	if !ok {
-		writeError(w, r, http.StatusBadRequest, cntMsg)
+		writeError(w, r, http.StatusBadRequest, hoursMsg)
 		return
 	}
 
-	needsRewrite := res.Match != nil || cnt > 0
+	needsRewrite := res.Match != nil || hours > 0
 	if needsRewrite {
 		var resp model.ForecastResponse
 		if err := json.Unmarshal(cf.ResponseJSON, &resp); err != nil {
 			writeError(w, r, http.StatusInternalServerError, "corrupt forecast cache")
 			return
 		}
-		if cnt > 0 && cnt < resp.Cnt {
-			resp.List = resp.List[:cnt]
-			resp.Cnt = cnt
+		if hours > 0 && hours < resp.Hours {
+			resp.List = resp.List[:hours]
+			resp.Hours = hours
 		}
 		if res.Match != nil {
 			res.Match.MatchedElevation = resp.City.Elevation
@@ -278,6 +284,17 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 type forecastWithMatch struct {
 	model.ForecastResponse
 	LocationMatch *model.LocationMatch `json:"location_match"`
+}
+
+func (s *Server) handleWeatherCodes(w http.ResponseWriter, r *http.Request) {
+	resp := model.WeatherCodesResponse{Codes: model.AllWeatherCodes()}
+	etag := etagFor(resp)
+	if checkConditional(w, r, etag) {
+		return
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	write(w, r, http.StatusOK, resp)
 }
 
 func (s *Server) handleDailyForecast(w http.ResponseWriter, r *http.Request) {
@@ -535,14 +552,14 @@ func parseMaxDistanceKm(raw string) (float64, bool, string) {
 	return v, true, ""
 }
 
-func parseOptionalCnt(raw string) (int, bool, string) {
+func parseOptionalHours(raw string) (int, bool, string) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, true, ""
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
-		return 0, false, "query parameter 'cnt' must be a positive integer"
+		return 0, false, "query parameter 'hours' must be a positive integer"
 	}
 	return n, true, ""
 }

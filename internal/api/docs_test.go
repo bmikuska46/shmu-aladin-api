@@ -50,7 +50,7 @@ func TestDocumentationLocales(t *testing.T) {
 				`<h2>Quick start</h2>`,
 				`<h2>Endpoints</h2>`,
 				`Example response`,
-				`Invoke-RestMethod "https://weather.example/api/v1/forecast?station=32737&amp;cnt=6"`,
+				`Invoke-RestMethod "https://weather.example/api/v1/forecast?station=32737&amp;hours=6"`,
 				`class="brand" aria-label="SHMU ALADIN API documentation"`,
 				`href="/"`,
 				`>Slovenčina</a>`,

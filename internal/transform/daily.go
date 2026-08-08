@@ -42,6 +42,9 @@ func AggregateDaily(hourly model.ForecastResponse, days int) model.DailyForecast
 
 func aggregateOneDay(date string, items []model.ForecastItem, lat, lon float64) model.DailyForecastDay {
 	day := model.DailyForecastDay{Date: date}
+	if parsed, err := time.ParseInLocation("2006-01-02", date, geo.Bratislava); err == nil {
+		day.DateIndex = geo.WeekdayIndex(parsed.Weekday())
+	}
 
 	var (
 		tempMin, tempMax               *float64
@@ -54,7 +57,7 @@ func aggregateOneDay(date string, items []model.ForecastItem, lat, lon float64) 
 		cloudN                         int
 	)
 
-	weatherScore := map[int]weatherAccum{}
+	weatherScore := map[model.WeatherCode]weatherAccum{}
 
 	for _, it := range items {
 		tMin := firstFloat(it.Main.TempMin, it.Main.Temp)
@@ -116,7 +119,7 @@ func aggregateOneDay(date string, items []model.ForecastItem, lat, lon float64) 
 
 		if len(it.Weather) > 0 {
 			w := it.Weather[0]
-			acc := weatherScore[w.ID]
+			acc := weatherScore[w.Code]
 			acc.cond = w
 			acc.hours++
 			peak := 0.0
@@ -129,7 +132,7 @@ func aggregateOneDay(date string, items []model.ForecastItem, lat, lon float64) 
 			if peak > acc.peakPrecip {
 				acc.peakPrecip = peak
 			}
-			weatherScore[w.ID] = acc
+			weatherScore[w.Code] = acc
 		}
 	}
 
@@ -193,20 +196,20 @@ type weatherAccum struct {
 }
 
 // Severity priority: mixed > snow > heavy rain > moderate > light > clouds > clear.
-var weatherPriority = map[int]int{
-	616: 100,
-	600: 90,
-	502: 80,
-	501: 70,
-	500: 60,
-	804: 50,
-	803: 40,
-	802: 30,
-	801: 20,
-	800: 10,
+var weatherPriority = map[model.WeatherCode]int{
+	model.WeatherRainAndSnow:     100,
+	model.WeatherLightSnow:       90,
+	model.WeatherHeavyRain:       80,
+	model.WeatherModerateRain:    70,
+	model.WeatherLightRain:       60,
+	model.WeatherOvercastClouds:  50,
+	model.WeatherBrokenClouds:    40,
+	model.WeatherScatteredClouds: 30,
+	model.WeatherFewClouds:       20,
+	model.WeatherClear:           10,
 }
 
-func pickRepresentativeWeather(scores map[int]weatherAccum) model.WeatherCond {
+func pickRepresentativeWeather(scores map[model.WeatherCode]weatherAccum) model.WeatherCond {
 	var best weatherAccum
 	found := false
 	for _, acc := range scores {
@@ -215,24 +218,18 @@ func pickRepresentativeWeather(scores map[int]weatherAccum) model.WeatherCond {
 			found = true
 			continue
 		}
-		bp := weatherPriority[best.cond.ID]
-		ap := weatherPriority[acc.cond.ID]
+		bp := weatherPriority[best.cond.Code]
+		ap := weatherPriority[acc.cond.Code]
 		if ap > bp ||
 			(ap == bp && acc.hours > best.hours) ||
 			(ap == bp && acc.hours == best.hours && acc.peakPrecip > best.peakPrecip) ||
-			(ap == bp && acc.hours == best.hours && acc.peakPrecip == best.peakPrecip && acc.cond.ID < best.cond.ID) {
+			(ap == bp && acc.hours == best.hours && acc.peakPrecip == best.peakPrecip && acc.cond.Code < best.cond.Code) {
 			best = acc
 		}
 	}
 	if !found {
-		return model.WeatherCond{ID: 800, Main: "Clear", Description: "clear sky", Icon: "01d"}
+		return model.WeatherClear.Cond()
 	}
-	// Prefer daytime icon for the daily representative condition.
-	icon := best.cond.Icon
-	if len(icon) >= 2 {
-		icon = icon[:len(icon)-1] + "d"
-	}
-	best.cond.Icon = icon
 	return best.cond
 }
 

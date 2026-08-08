@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+	"time"
 
+	"github.com/bmikuska/shmu-weather-api/internal/geo"
+	"github.com/bmikuska/shmu-weather-api/internal/model"
 	"github.com/bmikuska/shmu-weather-api/internal/shmu"
 	"github.com/bmikuska/shmu-weather-api/internal/transform"
 )
@@ -28,21 +30,42 @@ func TestToOWMForecastFromSample(t *testing.T) {
 	if out.Code != "200" {
 		t.Fatalf("code=%s", out.Code)
 	}
-	if out.City.ID != 32737 {
-		t.Fatalf("city.id=%d", out.City.ID)
-	}
 	if out.City.Name != "Bratislava (centrum)" {
 		t.Fatalf("name=%s", out.City.Name)
 	}
-	if out.Cnt == 0 || len(out.List) == 0 {
+	if out.Hours == 0 || len(out.List) == 0 {
 		t.Fatal("expected forecast list")
+	}
+	if out.Hours != len(out.List) {
+		t.Fatalf("hours=%d len(list)=%d", out.Hours, len(out.List))
 	}
 	item := out.List[0]
 	if item.Main.Temp == nil {
 		t.Fatal("expected temp")
 	}
-	if len(item.Weather) == 0 {
-		t.Fatal("expected weather condition")
+	if len(item.Weather) == 0 || item.Weather[0].Code == "" || item.Weather[0].Description == "" {
+		t.Fatalf("expected weather code+description, got %+v", item.Weather)
+	}
+	if item.Date == "" {
+		t.Fatal("expected local date")
+	}
+	if item.DateIndex < 0 || item.DateIndex > 6 {
+		t.Fatalf("date_index=%d", item.DateIndex)
+	}
+	// 2026-08-07 is a Friday → index 4
+	wantIndex := geo.WeekdayIndex(time.Friday)
+	foundFriday := false
+	for _, it := range out.List {
+		if it.Date == "2026-08-07" {
+			foundFriday = true
+			if it.DateIndex != wantIndex {
+				t.Fatalf("date_index=%d want %d for %s", it.DateIndex, wantIndex, it.Date)
+			}
+			break
+		}
+	}
+	if !foundFriday {
+		t.Fatal("expected items on 2026-08-07")
 	}
 	if out.Meta.Source != "SHMU ALADIN" {
 		t.Fatalf("meta.source=%s", out.Meta.Source)
@@ -50,17 +73,6 @@ func TestToOWMForecastFromSample(t *testing.T) {
 	// August runtime → CEST (+7200).
 	if out.City.Timezone != 7200 {
 		t.Fatalf("timezone=%d want 7200", out.City.Timezone)
-	}
-	// Sample includes midnight UTC hours which are nighttime in August.
-	foundNight := false
-	for _, it := range out.List {
-		if len(it.Weather) > 0 && strings.HasSuffix(it.Weather[0].Icon, "n") {
-			foundNight = true
-			break
-		}
-	}
-	if !foundNight {
-		t.Fatal("expected at least one nighttime icon suffix")
 	}
 	// Zero precip should be preserved when source has a reading.
 	foundZeroRain := false
@@ -72,6 +84,14 @@ func TestToOWMForecastFromSample(t *testing.T) {
 	}
 	if !foundZeroRain {
 		t.Fatal("expected rain:0 when source has explicit zero")
+	}
+	// Weather uses catalog codes only (no icon/id/main).
+	for _, it := range out.List {
+		for _, w := range it.Weather {
+			if w.Code == model.WeatherClear && w.Description != "clear sky" {
+				t.Fatalf("clear description=%q", w.Description)
+			}
+		}
 	}
 }
 

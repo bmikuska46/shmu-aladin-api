@@ -46,8 +46,8 @@ func TestRenderForecast(t *testing.T) {
 	if err := json.Unmarshal(rendered.JSON, &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Code != "200" || resp.Cnt == 0 {
-		t.Fatalf("unexpected response: code=%s cnt=%d", resp.Code, resp.Cnt)
+	if resp.Code != "200" || resp.Hours == 0 {
+		t.Fatalf("unexpected response: code=%s hours=%d", resp.Code, resp.Hours)
 	}
 
 	zr, err := gzip.NewReader(bytes.NewReader(rendered.Gzip))

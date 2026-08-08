@@ -27,6 +27,17 @@ func LocalDateString(ts int64) string {
 	return LocalDate(ts).Format("2006-01-02")
 }
 
+// DateIndex returns weekday index for Europe/Bratislava: 0=Monday … 6=Sunday.
+func DateIndex(ts int64) int {
+	return WeekdayIndex(LocalDate(ts).Weekday())
+}
+
+// WeekdayIndex maps time.Weekday to 0=Monday … 6=Sunday.
+func WeekdayIndex(w time.Weekday) int {
+	// time.Weekday: Sunday=0 … Saturday=6
+	return (int(w) + 6) % 7
+}
+
 // TimezoneOffsetSeconds returns the Europe/Bratislava UTC offset at ts.
 func TimezoneOffsetSeconds(ts int64) int {
 	_, offset := time.Unix(ts, 0).In(Bratislava).Zone()

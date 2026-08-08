@@ -47,6 +47,7 @@ Slovak documentation is available at `/` and `/docs`. The English version is at 
 | `GET` | `/api/v1/forecast?station={id}` or `?lat=&lon=` | Latest ALADIN forecast, next 3 days (OWM-like); coordinates resolve to the nearest station |
 | `GET` | `/api/v1/forecast/daily?...` | Daily summaries aggregated from the hourly forecast |
 | `GET` | `/api/v1/weather?...` | Alias of forecast |
+| `GET` | `/api/v1/weather/codes` | Catalog of weather enums (`code` + `description`) |
 | `GET` | `/api/v1/indicators?...` | Derived (non-official) weather risk indicators |
 
 ### Stations
@@ -64,12 +65,14 @@ GET /api/v1/stations?search=banovce
 
 ```
 GET /api/v1/forecast?station=32737
-GET /api/v1/forecast?station=32737&cnt=24
+GET /api/v1/forecast?station=32737&hours=24
 GET /api/v1/forecast?lat=48.15&lon=17.11
-GET /api/v1/forecast?lat=48.15&lon=17.11&cnt=24
+GET /api/v1/forecast?lat=48.15&lon=17.11&hours=24
 ```
 
 Provide either `station` (station ID) or both `lat` and `lon` (WGS84). With coordinates, the API picks the nearest station and returns that station’s forecast (`city` in the response is still the matched station) plus `location_match` (distance in km, station elevation). Optional `max_distance_km` (max 500) returns `404` when the nearest station is too far. An `elevation` query parameter is rejected — forecasts are not elevation-corrected.
+
+Each hourly step includes a local `date` (Europe/Bratislava) and `date_index` (0 = Monday … 6 = Sunday). Weather is `{ "code", "description" }`; the full catalog is available at `GET /api/v1/weather/codes`.
 
 ### Daily summary
 
@@ -97,11 +100,13 @@ Example hourly forecast shape:
 {
   "code": "200",
   "message": 0,
-  "cnt": 103,
+  "hours": 103,
   "list": [
     {
       "dt": 1786064400,
       "dt_txt": "2026-08-07 01:00:00",
+      "date": "2026-08-07",
+      "date_index": 4,
       "main": {
         "temp": 24.353,
         "temp_min": 24.276,
@@ -109,14 +114,13 @@ Example hourly forecast shape:
         "pressure": 1015.485,
         "sea_level": 1015.485
       },
-      "weather": [{ "id": 803, "main": "Clouds", "description": "broken clouds", "icon": "04d" }],
+      "weather": [{ "code": "broken_clouds", "description": "broken clouds" }],
       "clouds": { "all": 70.986, "low": 0, "mid": 8.067, "high": 68.723 },
       "wind": { "speed": 8.902, "deg": 317.732, "gust": 19.415 },
       "rain": { "1h": 0.2 }
     }
   ],
   "city": {
-    "id": 32737,
     "name": "Bratislava (centrum)",
     "coord": { "lat": 48.156, "lon": 17.105 },
     "country": "SK",
