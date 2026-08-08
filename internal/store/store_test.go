@@ -145,6 +145,32 @@ func TestStationIDsMissingCurrentForecast(t *testing.T) {
 	}
 }
 
+func TestFindNearestStation(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+
+	if _, err := st.FindNearestStation(ctx, 48.15, 17.10); err != ErrNotFound {
+		t.Fatalf("empty DB: got err=%v, want ErrNotFound", err)
+	}
+
+	err := st.UpsertStations(ctx, []model.Station{
+		{ID: 1, Name: "Far", Lat: 49.0, Lon: 20.0, DistrictCode: 1},
+		{ID: 32737, Name: "Bratislava", Lat: 48.156, Lon: 17.105, DistrictCode: 101},
+		{ID: 3, Name: "Nearish", Lat: 48.20, Lon: 17.20, DistrictCode: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := st.FindNearestStation(ctx, 48.15, 17.10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != 32737 {
+		t.Fatalf("nearest id=%d name=%q, want 32737 Bratislava", got.ID, got.Name)
+	}
+}
+
 func TestOpenUsesSeparateReadWritePools(t *testing.T) {
 	st := openTestStore(t)
 	if st.write == nil || st.read == nil {

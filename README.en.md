@@ -43,8 +43,8 @@ Slovak documentation is available at `/` and `/docs`. The English version is at 
 | `GET` | `/api/v1` | List of available endpoints |
 | `GET` | `/api/v1/stations` | Paginated station list + search |
 | `GET` | `/api/v1/stations/{id}` | Single station |
-| `GET` | `/api/v1/forecast?station={id}` | Latest ALADIN forecast, next 3 days (OWM-like) |
-| `GET` | `/api/v1/weather?station={id}` | Alias of forecast |
+| `GET` | `/api/v1/forecast?station={id}` or `?lat=&lon=` | Latest ALADIN forecast, next 3 days (OWM-like); coordinates resolve to the nearest station |
+| `GET` | `/api/v1/weather?...` | Alias of forecast |
 
 ### Stations
 
@@ -62,8 +62,11 @@ GET /api/v1/stations?search=banovce
 ```
 GET /api/v1/forecast?station=32737
 GET /api/v1/forecast?station=32737&cnt=24
+GET /api/v1/forecast?lat=48.15&lon=17.11
+GET /api/v1/forecast?lat=48.15&lon=17.11&cnt=24
 ```
 
+Provide either `station` (station ID) or both `lat` and `lon` (WGS84). With coordinates, the API picks the nearest station and returns that station’s forecast (`city` in the response is still the matched station).
 Example shape:
 
 ```json

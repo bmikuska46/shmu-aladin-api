@@ -48,6 +48,7 @@ func TestDocumentationLocales(t *testing.T) {
 				`<h2>Quick start</h2>`,
 				`<h2>Usage examples</h2>`,
 				`<h3>Forecast for Bratislava</h3>`,
+				`<h3>Forecast by coordinates</h3>`,
 				`class="brand" aria-label="SHMU ALADIN API documentation"`,
 				`href="/"`,
 				`>Slovenčina</a>`,

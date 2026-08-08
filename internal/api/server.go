@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	// "encoding/xml" // XML responses disabled for now; re-enable with wantsXML/write below
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -108,12 +110,12 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request) {
 			},
 			{
 				"method":      "GET",
-				"path":        "/api/v1/forecast?station={id}",
-				"description": "Latest ALADIN forecast for the next 3 days",
+				"path":        "/api/v1/forecast?station={id}|lat={lat}&lon={lon}",
+				"description": "Latest ALADIN forecast for the next 3 days (by station ID or nearest station to coordinates)",
 			},
 			{
 				"method":      "GET",
-				"path":        "/api/v1/weather?station={id}",
+				"path":        "/api/v1/weather?station={id}|lat={lat}&lon={lon}",
 				"description": "Alias of /api/v1/forecast",
 			},
 		},
@@ -168,9 +170,9 @@ func (s *Server) handleGetStation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
-	stationID, ok, msg := requireStationQuery(r)
-	if !ok {
-		writeError(w, r, http.StatusBadRequest, msg)
+	stationID, status, msg := s.resolveForecastStation(r)
+	if status != 0 {
+		writeError(w, r, status, msg)
 		return
 	}
 
@@ -214,6 +216,96 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(cf.ResponseJSON)
 }
 
+// resolveForecastStation returns a station ID from either ?station= or ?lat=&lon= (nearest station).
+// On failure status is a non-zero HTTP status code.
+func (s *Server) resolveForecastStation(r *http.Request) (int64, int, string) {
+	q := r.URL.Query()
+	hasStation := q.Has("station")
+	hasLat := q.Has("lat") || q.Has("latitude")
+	hasLon := q.Has("lon") || q.Has("longitude")
+
+	if hasStation && (hasLat || hasLon) {
+		return 0, http.StatusBadRequest, "provide either 'station' or 'lat' and 'lon', not both"
+	}
+	if hasStation {
+		id, ok, msg := parseStationQuery(q.Get("station"))
+		if !ok {
+			return 0, http.StatusBadRequest, msg
+		}
+		return id, 0, ""
+	}
+	if hasLat || hasLon {
+		if !hasLat || !hasLon {
+			return 0, http.StatusBadRequest, "query parameters 'lat' and 'lon' are both required"
+		}
+		lat, ok, msg := parseCoord(firstNonEmpty(q.Get("lat"), q.Get("latitude")), "lat", -90, 90)
+		if !ok {
+			return 0, http.StatusBadRequest, msg
+		}
+		lon, ok, msg := parseCoord(firstNonEmpty(q.Get("lon"), q.Get("longitude")), "lon", -180, 180)
+		if !ok {
+			return 0, http.StatusBadRequest, msg
+		}
+		st, err := s.store.FindNearestStation(r.Context(), lat, lon)
+		if errors.Is(err, store.ErrNotFound) {
+			return 0, http.StatusNotFound, "no stations available"
+		}
+		if err != nil {
+			return 0, http.StatusInternalServerError, "failed to find nearest station"
+		}
+		return st.ID, 0, ""
+	}
+	return 0, http.StatusBadRequest, "query parameter 'station' or both 'lat' and 'lon' is required"
+}
+
+func parseStationQuery(raw string) (int64, bool, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false, "query parameter 'station' must be a valid station id"
+	}
+	id, ok := parsePositiveInt(raw)
+	if !ok {
+		return 0, false, "query parameter 'station' must be a valid station id"
+	}
+	return id, true, ""
+}
+
+func parseCoord(raw, name string, min, max float64) (float64, bool, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false, "query parameter '" + name + "' must be a valid number"
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false, "query parameter '" + name + "' must be a valid number"
+	}
+	if v < min || v > max {
+		return 0, false, fmt.Sprintf("query parameter '%s' must be between %g and %g", name, min, max)
+	}
+	return v, true, ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func parsePositiveInt(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
 func (s *Server) writeForecastWithCnt(w http.ResponseWriter, r *http.Request, cf store.CurrentForecast, cnt int) {
 	var resp model.ForecastResponse
 	if err := json.Unmarshal(cf.ResponseJSON, &resp); err != nil {
@@ -236,33 +328,6 @@ func acceptsGzip(r *http.Request) bool {
 		}
 	}
 	return false
-}
-
-func requireStationQuery(r *http.Request) (int64, bool, string) {
-	if !r.URL.Query().Has("station") {
-		return 0, false, "query parameter 'station' is required"
-	}
-	raw := strings.TrimSpace(r.URL.Query().Get("station"))
-	if raw == "" {
-		return 0, false, "query parameter 'station' must be a valid station id"
-	}
-	id, ok := parsePositiveInt(raw)
-	if !ok {
-		return 0, false, "query parameter 'station' must be a valid station id"
-	}
-	return id, true, ""
-}
-
-func parsePositiveInt(s string) (int64, bool) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, false
-	}
-	id, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, false
-	}
-	return id, true
 }
 
 // XML support kept for later — uncomment encoding/xml import + these helpers to restore.

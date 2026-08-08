@@ -353,6 +353,23 @@ func (s *Store) StationExists(ctx context.Context, id int64) (bool, error) {
 	return err == nil, err
 }
 
+// FindNearestStation returns the station closest to the given WGS84 coordinates.
+// Distance uses an equirectangular approximation (accurate enough for Slovakia-scale lookups).
+func (s *Store) FindNearestStation(ctx context.Context, lat, lon float64) (model.Station, error) {
+	cosLat := math.Cos(lat * math.Pi / 180)
+	var st model.Station
+	err := s.read.QueryRowContext(ctx, `
+SELECT id, name, lat, lon, district_code
+FROM stations
+ORDER BY ((lat - ?) * (lat - ?)) + (((lon - ?) * ?) * ((lon - ?) * ?))
+LIMIT 1`, lat, lat, lon, cosLat, lon, cosLat).
+		Scan(&st.ID, &st.Name, &st.Lat, &st.Lon, &st.DistrictCode)
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Station{}, ErrNotFound
+	}
+	return st, err
+}
+
 func (s *Store) SaveProducts(ctx context.Context, stationID int64, payload any) error {
 	b, err := json.Marshal(payload)
 	if err != nil {

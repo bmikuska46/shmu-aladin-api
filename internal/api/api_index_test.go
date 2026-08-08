@@ -50,8 +50,8 @@ func TestAPIIndex(t *testing.T) {
 			wantPaths := []string{
 				"/api/v1/stations",
 				"/api/v1/stations/{id}",
-				"/api/v1/forecast?station={id}",
-				"/api/v1/weather?station={id}",
+				"/api/v1/forecast?station={id}|lat={lat}&lon={lon}",
+				"/api/v1/weather?station={id}|lat={lat}&lon={lon}",
 			}
 			if len(body.Endpoints) != len(wantPaths) {
 				t.Fatalf("endpoints=%d want %d", len(body.Endpoints), len(wantPaths))

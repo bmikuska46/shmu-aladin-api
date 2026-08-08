@@ -43,8 +43,8 @@ Slovenská dokumentácia je dostupná na `/` a `/docs`. Anglická verzia je na `
 | `GET` | `/api/v1` | Zoznam dostupných endpointov |
 | `GET` | `/api/v1/stations` | Stránkovaný zoznam staníc a vyhľadávanie |
 | `GET` | `/api/v1/stations/{id}` | Detail stanice |
-| `GET` | `/api/v1/forecast?station={id}` | Najnovšia predpoveď ALADIN na 3 dni v štruktúre podobnej OWM |
-| `GET` | `/api/v1/weather?station={id}` | Alias predpovede |
+| `GET` | `/api/v1/forecast?station={id}` alebo `?lat=&lon=` | Najnovšia predpoveď ALADIN na 3 dni v štruktúre podobnej OWM; súradnice sa mapujú na najbližšiu stanicu |
+| `GET` | `/api/v1/weather?...` | Alias predpovede |
 
 ### Stanice
 
@@ -62,8 +62,11 @@ GET /api/v1/stations?search=banovce
 ```
 GET /api/v1/forecast?station=32737
 GET /api/v1/forecast?station=32737&cnt=24
+GET /api/v1/forecast?lat=48.15&lon=17.11
+GET /api/v1/forecast?lat=48.15&lon=17.11&cnt=24
 ```
 
+Zadajte buď `station` (ID stanice), alebo `lat` a `lon` (WGS84). Pri súradniciach API vyberie najbližšiu stanicu a vráti jej predpoveď (`city` v odpovedi je stále nájdená stanica).
 Príklad odpovede:
 
 ```json

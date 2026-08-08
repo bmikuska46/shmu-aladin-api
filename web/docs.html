@@ -412,10 +412,19 @@
           </article>
 
           <article class="endpoint" id="forecast">
-            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/forecast?station={id}</code></div>
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/forecast</code></div>
             <div class="endpoint-body">
-              <p>Najnovšia predpoveď ALADIN na nasledujúce 3 dni. Voliteľný parameter <code class="inline-code">cnt</code> určuje počet hodinových krokov.</p>
-              <p>Alias: <code class="inline-code">/api/v1/weather?station={id}</code></p>
+              <p>Najnovšia predpoveď ALADIN na nasledujúce 3 dni. Zadajte buď <code class="inline-code">station</code> (ID stanice), alebo <code class="inline-code">lat</code> a <code class="inline-code">lon</code> (najbližšia stanica). Voliteľný parameter <code class="inline-code">cnt</code> určuje počet hodinových krokov.</p>
+              <p>Alias: <code class="inline-code">/api/v1/weather</code> s rovnakými parametrami.</p>
+              <table class="params">
+                <thead><tr><th>Parameter</th><th>Popis</th></tr></thead>
+                <tbody>
+                  <tr><td><code>station</code></td><td>ID stanice. Alternatíva k <code class="inline-code">lat</code> + <code class="inline-code">lon</code>.</td></tr>
+                  <tr><td><code>lat</code></td><td>Zemepisná šírka (−90 až 90). Použite spolu s <code class="inline-code">lon</code>.</td></tr>
+                  <tr><td><code>lon</code></td><td>Zemepisná dĺžka (−180 až 180). Použite spolu s <code class="inline-code">lat</code>.</td></tr>
+                  <tr><td><code>cnt</code></td><td>Počet hodinových krokov v odpovedi.</td></tr>
+                </tbody>
+              </table>
             </div>
           </article>
         </section>
@@ -444,6 +453,13 @@
             <div class="code-label">curl · prvých 6 hodín</div>
             <button class="copy-button" type="button">Kopírovať</button>
             <pre><code>curl "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6"</code></pre>
+          </div>
+
+          <h3>Predpoveď podľa súradníc</h3>
+          <div class="code-block">
+            <div class="code-label">curl · najbližšia stanica</div>
+            <button class="copy-button" type="button">Kopírovať</button>
+            <pre><code>curl "__WEB_URL__/api/v1/forecast?lat=48.15&amp;lon=17.11&amp;cnt=6"</code></pre>
           </div>
         </section>
 
