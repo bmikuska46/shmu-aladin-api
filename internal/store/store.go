@@ -12,12 +12,17 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/bmikuska/shmu-weather-api/internal/model"
 	"github.com/bmikuska/shmu-weather-api/internal/normalize"
 
 	_ "modernc.org/sqlite"
 )
+
+// maxSearchQueryRunes caps user search input to bound FTS/LIKE work.
+const maxSearchQueryRunes = 100
 
 var ErrNotFound = errors.New("not found")
 
@@ -256,6 +261,7 @@ func (s *Store) ListStations(ctx context.Context, query string, page, pageSize i
 		pageSize = 200
 	}
 	offset := (page - 1) * pageSize
+	query = truncateRunes(query, maxSearchQueryRunes)
 	folded := normalize.Fold(query)
 
 	var (
@@ -276,15 +282,18 @@ ORDER BY name COLLATE NOCASE
 LIMIT ? OFFSET ?`, pageSize, offset)
 	} else {
 		// Prefer FTS match; fall back to LIKE on folded name for partial substrings.
+		// Both use bound parameters; FTS tokens are quoted/sanitized and LIKE
+		// wildcards in user input are escaped so they cannot alter query semantics.
 		ftsQuery := buildFTSQuery(folded)
+		likePattern := "%" + escapeLike(folded) + "%"
 		err = s.read.QueryRowContext(ctx, `
 SELECT COUNT(*) FROM (
   SELECT s.id FROM stations s
   JOIN stations_fts f ON f.rowid = s.id
   WHERE stations_fts MATCH ?
   UNION
-  SELECT id FROM stations WHERE name_folded LIKE ?
-)`, ftsQuery, "%"+folded+"%").Scan(&total)
+  SELECT id FROM stations WHERE name_folded LIKE ? ESCAPE '\'
+)`, ftsQuery, likePattern).Scan(&total)
 		if err != nil {
 			return model.StationList{}, err
 		}
@@ -296,10 +305,10 @@ SELECT id, name, lat, lon, district_code FROM (
   WHERE stations_fts MATCH ?
   UNION
   SELECT id, name, lat, lon, district_code, name_folded
-  FROM stations WHERE name_folded LIKE ?
+  FROM stations WHERE name_folded LIKE ? ESCAPE '\'
 )
 ORDER BY name COLLATE NOCASE
-LIMIT ? OFFSET ?`, ftsQuery, "%"+folded+"%", pageSize, offset)
+LIMIT ? OFFSET ?`, ftsQuery, likePattern, pageSize, offset)
 	}
 	if err != nil {
 		return model.StationList{}, err
@@ -333,20 +342,65 @@ LIMIT ? OFFSET ?`, ftsQuery, "%"+folded+"%", pageSize, offset)
 	}, nil
 }
 
+// buildFTSQuery turns folded user text into a safe FTS5 MATCH expression.
+// Each token is restricted to letters/digits/hyphen/apostrophe and wrapped in
+// double quotes so FTS operators (AND/OR/NOT/NEAR/:, *, ^, etc.) stay literal.
 func buildFTSQuery(folded string) string {
 	parts := strings.Fields(folded)
 	quoted := make([]string, 0, len(parts))
 	for _, p := range parts {
-		p = strings.ReplaceAll(p, `"`, "")
+		p = sanitizeFTSToken(p)
 		if p == "" {
 			continue
 		}
 		quoted = append(quoted, `"`+p+`"*`)
 	}
 	if len(quoted) == 0 {
-		return `""*`
+		// Match nothing: empty quoted phrase with prefix is invalid for useful
+		// hits and avoids passing raw user text into MATCH.
+		return `""`
 	}
 	return strings.Join(quoted, " ")
+}
+
+func sanitizeFTSToken(p string) string {
+	var b strings.Builder
+	b.Grow(len(p))
+	for _, r := range p {
+		switch {
+		case unicode.IsLetter(r), unicode.IsNumber(r), r == '-', r == '\'':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// escapeLike escapes \, %, and _ so user input cannot inject LIKE wildcards.
+func escapeLike(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	s = strings.ReplaceAll(s, `_`, `\_`)
+	return s
+}
+
+func truncateRunes(s string, max int) string {
+	if max <= 0 || s == "" {
+		return s
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	var b strings.Builder
+	b.Grow(max)
+	n := 0
+	for _, r := range s {
+		if n >= max {
+			break
+		}
+		b.WriteRune(r)
+		n++
+	}
+	return b.String()
 }
 
 func (s *Store) GetStation(ctx context.Context, id int64) (model.Station, error) {

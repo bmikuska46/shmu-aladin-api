@@ -3,12 +3,24 @@ package shmu
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"path"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// ErrInvalidFileLink is returned when an opendata path fails strict validation.
+var ErrInvalidFileLink = errors.New("invalid aladin file link")
+
+// aladinFileLinkRe matches the conventional SHMU datanwp ALADIN path only.
+// Example: aladin/2026-08-07/32737_2026-08-07_00.json
+var aladinFileLinkRe = regexp.MustCompile(`^aladin/[0-9]{4}-[0-9]{2}-[0-9]{2}/[0-9]+_[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{2}\.json$`)
 
 type Client struct {
 	baseURL     string
@@ -142,12 +154,77 @@ func (c *Client) GetStationProducts(ctx context.Context, stationID int64) (*RawP
 }
 
 func (c *Client) GetAladinFile(ctx context.Context, fileLink string) (*AladinForecast, error) {
-	url := c.dataBaseURL + "/" + fileLink
+	if err := ValidateAladinFileLink(fileLink); err != nil {
+		return nil, err
+	}
+	fetchURL, err := joinDataURL(c.dataBaseURL, fileLink)
+	if err != nil {
+		return nil, err
+	}
 	var out AladinForecast
-	if err := c.getJSON(ctx, url, &out); err != nil {
+	if err := c.getJSON(ctx, fetchURL, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ValidateAladinFileLink rejects path traversal, absolute URLs, and any path
+// that does not match the expected SHMU ALADIN opendata layout. Call this
+// before fetching upstream so untrusted file_link values from products JSON
+// cannot redirect requests off the configured data host.
+func ValidateAladinFileLink(fileLink string) error {
+	if fileLink == "" {
+		return fmt.Errorf("%w: empty", ErrInvalidFileLink)
+	}
+	if fileLink != strings.TrimSpace(fileLink) {
+		return fmt.Errorf("%w: surrounding whitespace", ErrInvalidFileLink)
+	}
+	if strings.Contains(fileLink, "..") || strings.ContainsAny(fileLink, "\\?#\x00\r\n\t ") {
+		return fmt.Errorf("%w: unsafe characters", ErrInvalidFileLink)
+	}
+	if strings.Contains(fileLink, "://") || strings.HasPrefix(fileLink, "//") || strings.HasPrefix(fileLink, "/") {
+		return fmt.Errorf("%w: absolute or scheme URL", ErrInvalidFileLink)
+	}
+	cleaned := path.Clean("/" + fileLink)
+	if cleaned != "/"+fileLink {
+		return fmt.Errorf("%w: path cleaned away from original", ErrInvalidFileLink)
+	}
+	if !aladinFileLinkRe.MatchString(fileLink) {
+		return fmt.Errorf("%w: pattern mismatch", ErrInvalidFileLink)
+	}
+	return nil
+}
+
+func joinDataURL(base, fileLink string) (string, error) {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	if base == "" {
+		return "", fmt.Errorf("%w: empty data base URL", ErrInvalidFileLink)
+	}
+	u, err := url.Parse(base + "/")
+	if err != nil {
+		return "", fmt.Errorf("%w: parse data base URL: %v", ErrInvalidFileLink, err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return "", fmt.Errorf("%w: data base URL must be http(s)", ErrInvalidFileLink)
+	}
+	ref, err := url.Parse(fileLink)
+	if err != nil {
+		return "", fmt.Errorf("%w: parse file link: %v", ErrInvalidFileLink, err)
+	}
+	if ref.IsAbs() || ref.Host != "" || strings.HasPrefix(ref.Path, "/") {
+		return "", fmt.Errorf("%w: file link must be a relative path", ErrInvalidFileLink)
+	}
+	joined := u.ResolveReference(ref)
+	// Ensure the resolved URL stays under the configured data base path.
+	basePath := strings.TrimSuffix(u.EscapedPath(), "/")
+	joinedPath := joined.EscapedPath()
+	if joined.Scheme != u.Scheme || joined.Host != u.Host {
+		return "", fmt.Errorf("%w: resolved off data host", ErrInvalidFileLink)
+	}
+	if basePath != "" && joinedPath != basePath && !strings.HasPrefix(joinedPath, basePath+"/") {
+		return "", fmt.Errorf("%w: resolved outside data base path", ErrInvalidFileLink)
+	}
+	return joined.String(), nil
 }
 
 func (c *Client) getJSON(ctx context.Context, url string, dest any) error {
