@@ -166,8 +166,30 @@ func TestFindNearestStation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ID != 32737 {
-		t.Fatalf("nearest id=%d name=%q, want 32737 Bratislava", got.ID, got.Name)
+	if got.Station.ID != 32737 {
+		t.Fatalf("nearest id=%d name=%q, want 32737 Bratislava", got.Station.ID, got.Station.Name)
+	}
+	if got.DistanceKm <= 0 {
+		t.Fatalf("expected positive distance, got %v", got.DistanceKm)
+	}
+}
+
+func TestFindNearestStationTieBreakByID(t *testing.T) {
+	st := openTestStore(t)
+	ctx := context.Background()
+	err := st.UpsertStations(ctx, []model.Station{
+		{ID: 20, Name: "B", Lat: 48.0, Lon: 17.0, DistrictCode: 1},
+		{ID: 10, Name: "A", Lat: 48.0, Lon: 17.0, DistrictCode: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.FindNearestStation(ctx, 48.0, 17.0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Station.ID != 10 {
+		t.Fatalf("tie-break id=%d want 10", got.Station.ID)
 	}
 }
 

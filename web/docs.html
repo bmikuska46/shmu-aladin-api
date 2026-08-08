@@ -248,6 +248,8 @@
     .path { color: #1e293b; font-size: 12.5px; font-weight: 500; overflow-wrap: anywhere; }
     .endpoint-body { padding: 12px; color: var(--muted); font-size: 13.5px; }
     .endpoint-body p:last-child { margin-bottom: 0; }
+    .endpoint-body .code-block { margin-top: 10px; }
+    .endpoint-body h3 { margin-top: 18px; }
     .params { width: 100%; margin: 10px 0 0; border-collapse: collapse; }
     .params th {
       padding: 6px 8px;
@@ -281,6 +283,15 @@
       text-transform: uppercase;
     }
     pre { margin: 0; padding: 12px 14px; overflow-x: auto; color: #dbe5f3; font-size: 12px; line-height: 1.6; }
+    .tok-cmd { color: #7dd3fc; }
+    .tok-fn { color: #93c5fd; }
+    .tok-flag { color: #fda4af; }
+    .tok-str { color: #86efac; }
+    .tok-num { color: #fbbf24; }
+    .tok-key { color: #c4b5fd; }
+    .tok-bool { color: #f9a8d4; }
+    .tok-op { color: #f0abfc; }
+    .tok-punc { color: #8d9bb0; }
     .copy-button {
       position: absolute;
       top: 5px;
@@ -349,11 +360,8 @@
       <a class="endpoint-link" href="#stations"><span class="mini-method">GET</span><span>/stations</span></a>
       <a class="endpoint-link" href="#station-detail"><span class="mini-method">GET</span><span>/stations/{id}</span></a>
       <a class="endpoint-link" href="#forecast"><span class="mini-method">GET</span><span>/forecast</span></a>
-    </div>
-    <div class="nav-group">
-      <p class="nav-label">Príklady</p>
-      <a href="#examples">curl a PowerShell</a>
-      <a href="#response">Formát odpovede</a>
+      <a class="endpoint-link" href="#forecast-daily"><span class="mini-method">GET</span><span>/forecast/daily</span></a>
+      <a class="endpoint-link" href="#indicators"><span class="mini-method">GET</span><span>/indicators</span></a>
     </div>
   </aside>
 
@@ -388,7 +396,37 @@
 
           <article class="endpoint" id="api-root">
             <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1</code></div>
-            <div class="endpoint-body">Zoznam dostupných endpointov API (JSON).</div>
+            <div class="endpoint-body">
+              <p>Zoznam dostupných endpointov API (JSON).</p>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1" |
+  ConvertTo-Json -Depth 5</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "name": "SHMU ALADIN API",
+  "version": "v1",
+  "base_url": "__WEB_URL__/api/v1",
+  "documentation": "__WEB_URL__/",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/stations",
+      "description": "Paginated station list with search"
+    }
+  ]
+}</code></pre>
+              </div>
+            </div>
           </article>
 
           <article class="endpoint" id="stations">
@@ -403,18 +441,74 @@
                   <tr><td><code>page_size</code>, <code>limit</code></td><td>Veľkosť stránky. Predvolená hodnota je 50, maximum 200.</td></tr>
                 </tbody>
               </table>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/stations?q=zilina&amp;page_size=5"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/stations?q=zilina&amp;page_size=5" |
+  ConvertTo-Json -Depth 5</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "stations": [
+    {
+      "id": 32801,
+      "name": "Žilina",
+      "lat": 49.223,
+      "lon": 18.739,
+      "district_code": 511
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "page_size": 5,
+  "total_pages": 1,
+  "query": "zilina"
+}</code></pre>
+              </div>
             </div>
           </article>
 
           <article class="endpoint" id="station-detail">
             <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/stations/{id}</code></div>
-            <div class="endpoint-body">Detail stanice podľa ID. Napríklad <code class="inline-code">32737</code> označuje Bratislavu centrum.</div>
+            <div class="endpoint-body">
+              <p>Detail stanice podľa ID. Napríklad <code class="inline-code">32737</code> označuje Bratislavu centrum.</p>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/stations/32737"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/stations/32737" |
+  ConvertTo-Json -Depth 5</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "id": 32737,
+  "name": "Bratislava (centrum)",
+  "lat": 48.156,
+  "lon": 17.105,
+  "district_code": 102
+}</code></pre>
+              </div>
+            </div>
           </article>
 
           <article class="endpoint" id="forecast">
             <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/forecast</code></div>
             <div class="endpoint-body">
               <p>Najnovšia predpoveď ALADIN na nasledujúce 3 dni. Zadajte buď <code class="inline-code">station</code> (ID stanice), alebo <code class="inline-code">lat</code> a <code class="inline-code">lon</code> (najbližšia stanica). Voliteľný parameter <code class="inline-code">cnt</code> určuje počet hodinových krokov.</p>
+              <p>Pri súradniciach odpoveď obsahuje <code class="inline-code">location_match</code> (vzdialenosť a nadmorská výška stanice). Voliteľne <code class="inline-code">max_distance_km</code> (max. 500) odmietne príliš vzdialenú zhodu.</p>
               <p>Alias: <code class="inline-code">/api/v1/weather</code> s rovnakými parametrami.</p>
               <table class="params">
                 <thead><tr><th>Parameter</th><th>Popis</th></tr></thead>
@@ -423,53 +517,24 @@
                   <tr><td><code>lat</code></td><td>Zemepisná šírka (−90 až 90). Použite spolu s <code class="inline-code">lon</code>.</td></tr>
                   <tr><td><code>lon</code></td><td>Zemepisná dĺžka (−180 až 180). Použite spolu s <code class="inline-code">lat</code>.</td></tr>
                   <tr><td><code>cnt</code></td><td>Počet hodinových krokov v odpovedi.</td></tr>
+                  <tr><td><code>max_distance_km</code></td><td>Maximálna vzdialenosť k najbližšej stanici (iba s lat/lon).</td></tr>
                 </tbody>
               </table>
-            </div>
-          </article>
-        </section>
-
-        <section id="examples">
-          <h2>Príklady použitia</h2>
-          <p class="muted">Všetky príklady používajú vyššie uvedenú základnú adresu.</p>
-
-          <h3>Vyhľadanie staníc</h3>
-          <div class="code-block">
-            <div class="code-label">curl</div>
-            <button class="copy-button" type="button">Kopírovať</button>
-            <pre><code>curl "__WEB_URL__/api/v1/stations?q=zilina&amp;page_size=5"</code></pre>
-          </div>
-
-          <h3>PowerShell</h3>
-          <div class="code-block">
-            <div class="code-label">PowerShell</div>
-            <button class="copy-button" type="button">Kopírovať</button>
-            <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/stations?q=bratislava&amp;page_size=3" |
-  ConvertTo-Json -Depth 5</code></pre>
-          </div>
-
-          <h3>Predpoveď pre Bratislavu</h3>
-          <div class="code-block">
-            <div class="code-label">curl · prvých 6 hodín</div>
-            <button class="copy-button" type="button">Kopírovať</button>
-            <pre><code>curl "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6"</code></pre>
-          </div>
-
-          <h3>Predpoveď podľa súradníc</h3>
-          <div class="code-block">
-            <div class="code-label">curl · najbližšia stanica</div>
-            <button class="copy-button" type="button">Kopírovať</button>
-            <pre><code>curl "__WEB_URL__/api/v1/forecast?lat=48.15&amp;lon=17.11&amp;cnt=6"</code></pre>
-          </div>
-        </section>
-
-        <section id="response">
-          <h2>Formát odpovede</h2>
-          <p class="muted">Skrátená ukážka odpovede predpovede:</p>
-          <div class="code-block">
-            <div class="code-label">JSON</div>
-            <button class="copy-button" type="button">Kopírovať</button>
-            <pre><code>{
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/forecast?station=32737&amp;cnt=6" |
+  ConvertTo-Json -Depth 6</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
   "code": "200",
   "cnt": 2,
   "list": [
@@ -480,7 +545,7 @@
       "wind": { "speed": 3.94, "deg": 316.6 },
       "clouds": { "all": 97.2 },
       "weather": [
-        { "id": 804, "main": "Clouds", "description": "overcast clouds" }
+        { "id": 804, "main": "Clouds", "description": "overcast clouds", "icon": "04d" }
       ]
     }
   ],
@@ -496,7 +561,126 @@
     "runtime": "2026-08-07T06:00:00Z"
   }
 }</code></pre>
-          </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint" id="forecast-daily">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/forecast/daily</code></div>
+            <div class="endpoint-body">
+              <p>Denné súhrny z hodinovej predpovede ALADIN (kalendárne dni <code class="inline-code">Europe/Bratislava</code>): min/max teplota, zrážky, vietor, dominantné počasie, východ/západ Slnka.</p>
+              <table class="params">
+                <thead><tr><th>Parameter</th><th>Popis</th></tr></thead>
+                <tbody>
+                  <tr><td><code>station</code> / <code>lat</code>+<code>lon</code></td><td>Rovnaké pravidlá ako pri hodinovej predpovedi.</td></tr>
+                  <tr><td><code>days</code></td><td>Počet dní (1 až dostupný horizont). Bez parametra vráti všetky dostupné dni.</td></tr>
+                  <tr><td><code>max_distance_km</code></td><td>Maximálna vzdialenosť pri súradniciach.</td></tr>
+                </tbody>
+              </table>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/forecast/daily?station=32737&amp;days=3"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/forecast/daily?station=32737&amp;days=3" |
+  ConvertTo-Json -Depth 6</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "code": "200",
+  "cnt": 1,
+  "list": [
+    {
+      "date": "2026-08-07",
+      "temp_min": 18.4,
+      "temp_max": 27.1,
+      "precipitation_total": 1.2,
+      "rain_total": 1.2,
+      "snow_total": 0,
+      "precipitation_hours": 2,
+      "wind_speed_max": 8.9,
+      "wind_gust_max": 19.4,
+      "cloud_cover_mean": 62.5,
+      "weather": {
+        "id": 500,
+        "main": "Rain",
+        "description": "light rain",
+        "icon": "10d"
+      },
+      "sunrise": "2026-08-07T05:32:00+02:00",
+      "sunset": "2026-08-07T20:11:00+02:00",
+      "is_partial": false
+    }
+  ],
+  "city": {
+    "id": 32737,
+    "name": "Bratislava (centrum)",
+    "coord": { "lat": 48.156, "lon": 17.105 },
+    "country": "SK"
+  }
+}</code></pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint" id="indicators">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/indicators</code></div>
+            <div class="endpoint-body">
+              <p>Indikátory odvodené z hodinovej predpovede (mráz, horúčava, vietor, intenzívny dážď, sneh, zmiešané zrážky, nízka oblačnosť v horách). <strong>Nie sú oficiálnymi výstrahami SHMÚ</strong> — každá položka má <code class="inline-code">official: false</code> a <code class="inline-code">source_kind: "forecast"</code>.</p>
+              <table class="params">
+                <thead><tr><th>Parameter</th><th>Popis</th></tr></thead>
+                <tbody>
+                  <tr><td><code>station</code> / <code>lat</code>+<code>lon</code></td><td>Rovnaké pravidlá ako pri predpovedi.</td></tr>
+                  <tr><td><code>type</code></td><td>Filtrovanie typov oddelených čiarkou, napr. <code class="inline-code">frost,wind,heavy_rain</code>.</td></tr>
+                </tbody>
+              </table>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/indicators?lat=49.12&amp;lon=20.06&amp;type=frost,wind"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/indicators?lat=49.12&amp;lon=20.06&amp;type=frost,wind" |
+  ConvertTo-Json -Depth 6</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "code": "200",
+  "cnt": 1,
+  "list": [
+    {
+      "type": "wind",
+      "level": "moderate",
+      "valid_from": "2026-08-07T12:00:00Z",
+      "valid_to": "2026-08-07T18:00:00Z",
+      "summary": "Elevated wind gusts in the forecast period",
+      "source_kind": "forecast",
+      "rule_version": "v1",
+      "official": false,
+      "available": true
+    }
+  ],
+  "location_match": {
+    "method": "nearest_aladin_station",
+    "requested_coord": { "lat": 49.12, "lon": 20.06 },
+    "matched_coord": { "lat": 49.08, "lon": 20.12 },
+    "distance_km": 6.2,
+    "matched_station_id": 12345,
+    "matched_station_name": "Example station"
+  }
+}</code></pre>
+              </div>
+            </div>
+          </article>
         </section>
 
         <section id="limits">
@@ -522,6 +706,81 @@
         sidebar.classList.remove('open');
         menuButton.setAttribute('aria-expanded', 'false');
       }
+    });
+
+    const escapeHtml = (value) =>
+      value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const tok = (cls, value) => `<span class="tok-${cls}">${escapeHtml(value)}</span>`;
+
+    const highlightJson = (src) =>
+      src.replace(
+        /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?)|\b(true|false|null)\b|([{}\[\]:,])/g,
+        (match, string, colon, number, bool, punc) => {
+          if (string !== undefined) {
+            return colon !== undefined
+              ? tok('key', string) + escapeHtml(colon)
+              : tok('str', string);
+          }
+          if (number !== undefined) return tok('num', number);
+          if (bool !== undefined) return tok('bool', bool);
+          return tok('punc', punc);
+        }
+      );
+
+    const highlightShellish = (src, { commands, functions }) => {
+      const commandSet = new Set(commands);
+      const functionSet = new Set(functions);
+      return src.replace(
+        /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(\|\s*)|(-[\w-]+)|(\b[A-Za-z_][\w.-]*\b)|(\S+)/g,
+        (match, string, pipe, flag, word, other) => {
+          if (string !== undefined) return tok('str', string);
+          if (pipe !== undefined) return tok('op', pipe);
+          if (flag !== undefined) return tok('flag', flag);
+          if (word !== undefined) {
+            if (commandSet.has(word)) return tok('cmd', word);
+            if (functionSet.has(word)) return tok('fn', word);
+            return escapeHtml(word);
+          }
+          return escapeHtml(other);
+        }
+      );
+    };
+
+    const highlightBash = (src) =>
+      highlightShellish(src, {
+        commands: ['curl', 'wget', 'http', 'https'],
+        functions: [],
+      });
+
+    const highlightPowerShell = (src) =>
+      highlightShellish(src, {
+        commands: [],
+        functions: ['Invoke-RestMethod', 'ConvertTo-Json', 'Invoke-WebRequest', 'ConvertFrom-Json'],
+      });
+
+    const languageFromLabel = (label) => {
+      const text = label.trim().toLowerCase();
+      if (text === 'curl') return 'bash';
+      if (text === 'powershell') return 'powershell';
+      if (text === 'base url') return 'url';
+      if (text.includes('odpovede') || text.includes('response') || text === 'json') return 'json';
+      return 'plain';
+    };
+
+    document.querySelectorAll('.code-block').forEach((block) => {
+      const label = block.querySelector('.code-label');
+      const code = block.querySelector('code');
+      if (!label || !code) return;
+
+      const lang = languageFromLabel(label.textContent || '');
+      const source = code.textContent;
+      code.classList.add(`language-${lang}`);
+
+      if (lang === 'json') code.innerHTML = highlightJson(source);
+      else if (lang === 'bash') code.innerHTML = highlightBash(source);
+      else if (lang === 'powershell') code.innerHTML = highlightPowerShell(source);
+      else if (lang === 'url') code.innerHTML = tok('str', source);
     });
 
     document.querySelectorAll('.copy-button').forEach((button) => {

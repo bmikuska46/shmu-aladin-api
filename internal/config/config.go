@@ -28,6 +28,9 @@ type Config struct {
 	// Bulk sync concurrency (point 5): bounded workers + global upstream rate.
 	SyncWorkers    int // parallel station sync workers (default 3, clamped 1–4)
 	SyncRatePerSec int // max SHMU station-sync jobs per second (default 20)
+
+	// ForecastStaleAfter marks stored forecasts as stale in derived responses.
+	ForecastStaleAfter time.Duration
 }
 
 func Load() Config {
@@ -50,6 +53,8 @@ func Load() Config {
 
 		SyncWorkers:    clampInt(intEnv("SYNC_WORKERS", 3), 1, 4),
 		SyncRatePerSec: clampInt(intEnv("SYNC_RATE_PER_SEC", 20), 1, 100),
+
+		ForecastStaleAfter: durationEnv("FORECAST_STALE_AFTER", 8*time.Hour),
 	}
 }
 

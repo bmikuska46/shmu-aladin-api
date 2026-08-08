@@ -44,6 +44,10 @@ func TestResolveForecastStation(t *testing.T) {
 		{name: "bad lat", query: "lat=abc&lon=17", wantStatus: http.StatusBadRequest},
 		{name: "lat out of range", query: "lat=100&lon=17", wantStatus: http.StatusBadRequest},
 		{name: "bad station", query: "station=0", wantStatus: http.StatusBadRequest},
+		{name: "elevation rejected", query: "lat=48.15&lon=17.10&elevation=500", wantStatus: http.StatusBadRequest},
+		{name: "max_distance with station", query: "station=32737&max_distance_km=10", wantStatus: http.StatusBadRequest},
+		{name: "max_distance too large", query: "lat=48.15&lon=17.10&max_distance_km=501", wantStatus: http.StatusBadRequest},
+		{name: "max_distance too far", query: "lat=48.15&lon=17.10&max_distance_km=0.001", wantStatus: http.StatusNotFound},
 	}
 
 	for _, tt := range tests {
@@ -63,5 +67,31 @@ func TestResolveForecastStation(t *testing.T) {
 				t.Fatalf("id=%d want %d", id, tt.wantID)
 			}
 		})
+	}
+}
+
+func TestResolveLocationMatchMetadata(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	err = st.UpsertStations(context.Background(), []model.Station{
+		{ID: 32737, Name: "Bratislava", Lat: 48.156, Lon: 17.105, DistrictCode: 101},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := New(st, nil, config.Config{})
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/forecast?lat=48.15&lon=17.10", nil)
+	res, status, msg := server.resolveLocation(req)
+	if status != 0 {
+		t.Fatalf("status=%d msg=%q", status, msg)
+	}
+	if res.Match == nil || res.Match.Method != "nearest_aladin_station" {
+		t.Fatalf("%+v", res.Match)
+	}
+	if res.Match.MatchedStationID != 32737 || res.Match.DistanceKm < 0 {
+		t.Fatalf("%+v", res.Match)
 	}
 }

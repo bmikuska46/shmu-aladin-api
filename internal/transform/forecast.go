@@ -6,9 +6,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bmikuska/shmu-weather-api/internal/geo"
 	"github.com/bmikuska/shmu-weather-api/internal/model"
 	"github.com/bmikuska/shmu-weather-api/internal/shmu"
 )
+
+// ForecastRenderVersion is bumped when ToOWMForecast output semantics change so
+// stored current_forecasts rows are rebuilt from raw ALADIN payloads.
+const ForecastRenderVersion = "2"
 
 // ToOWMForecast converts SHMU ALADIN time series into an OpenWeatherMap-like forecast.
 func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastResponse, error) {
@@ -39,6 +44,10 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 	snow := indexSeries(raw.Snowfall)
 
 	for _, ts := range timestamps {
+		dayIcon := "d"
+		if !geo.IsDaytime(ts, lat, lon) {
+			dayIcon = "n"
+		}
 		item := model.ForecastItem{
 			DT:    ts,
 			DTTxt: time.Unix(ts, 0).UTC().Format("2006-01-02 15:04:05"),
@@ -60,12 +69,14 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 				Deg:   windDeg[ts],
 				Gust:  windGust[ts],
 			},
-			Weather: deriveWeather(rain[ts], snow[ts], cloudsAll[ts]),
+			Weather: deriveWeather(rain[ts], snow[ts], cloudsAll[ts], dayIcon),
 		}
-		if v := rain[ts]; v != nil && *v > 0 {
+		// Include zero values when the source series has a reading so daily
+		// aggregation can distinguish missing from true zeroes.
+		if v := rain[ts]; v != nil {
 			item.Rain = &model.Precip1h{H1: round3(*v)}
 		}
-		if v := snow[ts]; v != nil && *v > 0 {
+		if v := snow[ts]; v != nil {
 			item.Snow = &model.Precip1h{H1: round3(*v)}
 		}
 		items = append(items, item)
@@ -74,6 +85,11 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 	runtime := ""
 	if runtimeTS > 0 {
 		runtime = time.Unix(runtimeTS, 0).UTC().Format(time.RFC3339)
+	}
+
+	tzTS := runtimeTS
+	if len(timestamps) > 0 {
+		tzTS = timestamps[0]
 	}
 
 	return model.ForecastResponse{
@@ -87,7 +103,7 @@ func ToOWMForecast(raw *shmu.AladinForecast, runtimeTS int64) (model.ForecastRes
 			Coord:     model.Coord{Lat: lat, Lon: lon},
 			Country:   "SK",
 			Elevation: elev,
-			Timezone:  7200, // Europe/Bratislava CET/CEST approx; clients should prefer UTC dt
+			Timezone:  geo.TimezoneOffsetSeconds(tzTS),
 		},
 		Meta: model.ForecastMeta{
 			Model:        raw.ModelName,
@@ -131,7 +147,7 @@ func indexSeries(s shmu.Series) map[int64]*float64 {
 	return out
 }
 
-func deriveWeather(rain, snow, clouds *float64) []model.WeatherCond {
+func deriveWeather(rain, snow, clouds *float64, dayIcon string) []model.WeatherCond {
 	r := 0.0
 	s := 0.0
 	c := 0.0
@@ -145,27 +161,31 @@ func deriveWeather(rain, snow, clouds *float64) []model.WeatherCond {
 		c = *clouds
 	}
 
+	withIcon := func(id int, main, desc, iconBase string) []model.WeatherCond {
+		return []model.WeatherCond{{ID: id, Main: main, Description: desc, Icon: iconBase + dayIcon}}
+	}
+
 	switch {
 	case s > 0 && r > 0:
-		return []model.WeatherCond{{ID: 616, Main: "Snow", Description: "rain and snow", Icon: "13d"}}
+		return withIcon(616, "Snow", "rain and snow", "13")
 	case s > 0:
-		return []model.WeatherCond{{ID: 600, Main: "Snow", Description: "light snow", Icon: "13d"}}
+		return withIcon(600, "Snow", "light snow", "13")
 	case r >= 7.5:
-		return []model.WeatherCond{{ID: 502, Main: "Rain", Description: "heavy intensity rain", Icon: "10d"}}
+		return withIcon(502, "Rain", "heavy intensity rain", "10")
 	case r >= 2.5:
-		return []model.WeatherCond{{ID: 501, Main: "Rain", Description: "moderate rain", Icon: "10d"}}
+		return withIcon(501, "Rain", "moderate rain", "10")
 	case r > 0:
-		return []model.WeatherCond{{ID: 500, Main: "Rain", Description: "light rain", Icon: "10d"}}
+		return withIcon(500, "Rain", "light rain", "10")
 	case c >= 85:
-		return []model.WeatherCond{{ID: 804, Main: "Clouds", Description: "overcast clouds", Icon: "04d"}}
+		return withIcon(804, "Clouds", "overcast clouds", "04")
 	case c >= 51:
-		return []model.WeatherCond{{ID: 803, Main: "Clouds", Description: "broken clouds", Icon: "04d"}}
+		return withIcon(803, "Clouds", "broken clouds", "04")
 	case c >= 25:
-		return []model.WeatherCond{{ID: 802, Main: "Clouds", Description: "scattered clouds", Icon: "03d"}}
+		return withIcon(802, "Clouds", "scattered clouds", "03")
 	case c > 0:
-		return []model.WeatherCond{{ID: 801, Main: "Clouds", Description: "few clouds", Icon: "02d"}}
+		return withIcon(801, "Clouds", "few clouds", "02")
 	default:
-		return []model.WeatherCond{{ID: 800, Main: "Clear", Description: "clear sky", Icon: "01d"}}
+		return withIcon(800, "Clear", "clear sky", "01")
 	}
 }
 

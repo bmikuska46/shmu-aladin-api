@@ -186,6 +186,22 @@ CREATE TABLE IF NOT EXISTS current_forecasts (
 	return nil
 }
 
+// EnsureForecastRenderVersion clears cached rendered forecasts when the transform
+// version changes so responses are rebuilt from stored raw ALADIN payloads.
+func (s *Store) EnsureForecastRenderVersion(ctx context.Context, version string) error {
+	cur, ok, err := s.GetMeta(ctx, "forecast_render_version")
+	if err != nil {
+		return err
+	}
+	if ok && cur == version {
+		return nil
+	}
+	if err := s.ClearCurrentForecasts(ctx); err != nil {
+		return err
+	}
+	return s.SetMeta(ctx, "forecast_render_version", version)
+}
+
 func (s *Store) UpsertStations(ctx context.Context, stations []model.Station) error {
 	tx, err := s.write.BeginTx(ctx, nil)
 	if err != nil {
@@ -353,21 +369,64 @@ func (s *Store) StationExists(ctx context.Context, id int64) (bool, error) {
 	return err == nil, err
 }
 
+// NearestStation is a station plus its Haversine distance from a query point.
+type NearestStation struct {
+	Station    model.Station
+	DistanceKm float64
+}
+
 // FindNearestStation returns the station closest to the given WGS84 coordinates.
-// Distance uses an equirectangular approximation (accurate enough for Slovakia-scale lookups).
-func (s *Store) FindNearestStation(ctx context.Context, lat, lon float64) (model.Station, error) {
-	cosLat := math.Cos(lat * math.Pi / 180)
-	var st model.Station
-	err := s.read.QueryRowContext(ctx, `
-SELECT id, name, lat, lon, district_code
-FROM stations
-ORDER BY ((lat - ?) * (lat - ?)) + (((lon - ?) * ?) * ((lon - ?) * ?))
-LIMIT 1`, lat, lat, lon, cosLat, lon, cosLat).
-		Scan(&st.ID, &st.Name, &st.Lat, &st.Lon, &st.DistrictCode)
-	if errors.Is(err, sql.ErrNoRows) {
-		return model.Station{}, ErrNotFound
+// Distance is exact Haversine (km). Equal distances break ties by lower station ID.
+func (s *Store) FindNearestStation(ctx context.Context, lat, lon float64) (NearestStation, error) {
+	rows, err := s.read.QueryContext(ctx, `
+SELECT id, name, lat, lon, district_code FROM stations`)
+	if err != nil {
+		return NearestStation{}, err
 	}
-	return st, err
+	defer rows.Close()
+
+	found := false
+	var best NearestStation
+	for rows.Next() {
+		var st model.Station
+		if err := rows.Scan(&st.ID, &st.Name, &st.Lat, &st.Lon, &st.DistrictCode); err != nil {
+			return NearestStation{}, err
+		}
+		d := haversineKm(lat, lon, st.Lat, st.Lon)
+		if !found || d < best.DistanceKm-1e-12 || (nearlyEqual(d, best.DistanceKm) && st.ID < best.Station.ID) {
+			best = NearestStation{Station: st, DistanceKm: d}
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return NearestStation{}, err
+	}
+	if !found {
+		return NearestStation{}, ErrNotFound
+	}
+	best.DistanceKm = math.Round(best.DistanceKm*10) / 10
+	return best, nil
+}
+
+func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
+	const r = 6371.0
+	φ1 := lat1 * math.Pi / 180
+	φ2 := lat2 * math.Pi / 180
+	Δφ := (lat2 - lat1) * math.Pi / 180
+	Δλ := (lon2 - lon1) * math.Pi / 180
+	a := math.Sin(Δφ/2)*math.Sin(Δφ/2) +
+		math.Cos(φ1)*math.Cos(φ2)*math.Sin(Δλ/2)*math.Sin(Δλ/2)
+	return r * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+}
+
+func nearlyEqual(a, b float64) bool {
+	return math.Abs(a-b) <= 1e-9
+}
+
+// ClearCurrentForecasts deletes all pre-rendered forecast rows (used when render semantics change).
+func (s *Store) ClearCurrentForecasts(ctx context.Context) error {
+	_, err := s.write.ExecContext(ctx, `DELETE FROM current_forecasts`)
+	return err
 }
 
 func (s *Store) SaveProducts(ctx context.Context, stationID int64, payload any) error {

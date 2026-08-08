@@ -22,6 +22,7 @@ export DATABASE_PATH="data/shmu.db"
 export STATIONS_CACHE_TTL="168h"         # 7 dní
 export FORECAST_SYNC_EVERY="30m"
 export SYNC_FORECASTS="false"            # bez hromadného sťahovania; načítanie na požiadanie
+export FORECAST_STALE_AFTER="8h"         # označenie zastaranej predpovede v odvodených odpovediach
 go run ./cmd/server
 ```
 
@@ -44,7 +45,9 @@ Slovenská dokumentácia je dostupná na `/` a `/docs`. Anglická verzia je na `
 | `GET` | `/api/v1/stations` | Stránkovaný zoznam staníc a vyhľadávanie |
 | `GET` | `/api/v1/stations/{id}` | Detail stanice |
 | `GET` | `/api/v1/forecast?station={id}` alebo `?lat=&lon=` | Najnovšia predpoveď ALADIN na 3 dni v štruktúre podobnej OWM; súradnice sa mapujú na najbližšiu stanicu |
+| `GET` | `/api/v1/forecast/daily?...` | Denné súhrny z hodinovej predpovede |
 | `GET` | `/api/v1/weather?...` | Alias predpovede |
+| `GET` | `/api/v1/indicators?...` | Odvodené (neoficiálne) indikátory rizika |
 
 ### Stanice
 
@@ -66,8 +69,29 @@ GET /api/v1/forecast?lat=48.15&lon=17.11
 GET /api/v1/forecast?lat=48.15&lon=17.11&cnt=24
 ```
 
-Zadajte buď `station` (ID stanice), alebo `lat` a `lon` (WGS84). Pri súradniciach API vyberie najbližšiu stanicu a vráti jej predpoveď (`city` v odpovedi je stále nájdená stanica).
-Príklad odpovede:
+Zadajte buď `station` (ID stanice), alebo `lat` a `lon` (WGS84). Pri súradniciach API vyberie najbližšiu stanicu a vráti jej predpoveď (`city` v odpovedi je stále nájdená stanica) spolu s `location_match` (vzdialenosť v km, nadmorská výška stanice). Voliteľne `max_distance_km` (max. 500) vráti `404`, ak je najbližšia stanica príliš ďaleko. Parameter `elevation` nie je podporovaný — predpoveď nie je korigovaná podľa výšky.
+
+### Denný súhrn
+
+```
+GET /api/v1/forecast/daily?station=32737
+GET /api/v1/forecast/daily?lat=48.15&lon=17.11&days=3
+```
+
+Agregácia hodinových krokov podľa kalendárneho dňa `Europe/Bratislava`: min/max teplota, úhrny zrážok (celkové / kvapalné / snehový vodný ekvivalent), počet hodín so zrážkami, max. vietor a nárazy, priemerná oblačnosť, reprezentatívne počasie, východ/západ Slnka, príznak `is_partial`.
+
+`precipitation_total` je súčet hodinového poľa Total precipitation; `rain_total` je odhad kvapalnej zložky (total − snowfall, min. 0); `snow_total` je vodný ekvivalent snehu. Chýbajúce vstupy sa vracajú ako `null`, nie ako nula.
+
+### Indikátory (neoficiálne)
+
+```
+GET /api/v1/indicators?station=32737
+GET /api/v1/indicators?lat=49.12&lon=20.06&type=frost,wind,heavy_rain
+```
+
+Typy v1: `frost`, `heat`, `wind`, `heavy_rain`, `snow`, `mixed_precipitation`, `low_cloud_mountain`. Každá položka má `official: false` a `source_kind: "forecast"` — nie sú oficiálnymi výstrahami SHMÚ.
+
+Príklad odpovede hodinovej predpovede:
 
 ```json
 {
@@ -124,9 +148,11 @@ Výstupy modelu ALADIN sa zvyčajne objavujú 3× denne (`00`, `06`, `12` alebo 
 ```
 cmd/server/          HTTP server a synchronizácia na pozadí
 internal/api/        Obsluha požiadaviek (JSON)
+internal/geo/        Časové pásmo, východ/západ Slnka, Haversine, čerstvosť
+internal/indicator/  Odvodené neoficiálne indikátory rizika
 internal/shmu/       Klient zdrojového API SHMÚ
 internal/store/      SQLite a FTS5
-internal/transform/  Mapovanie ALADIN → štruktúra podobná OWM
+internal/transform/  Mapovanie ALADIN → štruktúra podobná OWM + denné súhrny
 internal/syncer/     Sťahovanie a obnova dát
 internal/normalize/  Normalizácia diakritiky pre vyhľadávanie
 ```

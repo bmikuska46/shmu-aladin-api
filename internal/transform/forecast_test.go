@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/bmikuska/shmu-weather-api/internal/shmu"
@@ -45,6 +46,32 @@ func TestToOWMForecastFromSample(t *testing.T) {
 	}
 	if out.Meta.Source != "SHMU ALADIN" {
 		t.Fatalf("meta.source=%s", out.Meta.Source)
+	}
+	// August runtime → CEST (+7200).
+	if out.City.Timezone != 7200 {
+		t.Fatalf("timezone=%d want 7200", out.City.Timezone)
+	}
+	// Sample includes midnight UTC hours which are nighttime in August.
+	foundNight := false
+	for _, it := range out.List {
+		if len(it.Weather) > 0 && strings.HasSuffix(it.Weather[0].Icon, "n") {
+			foundNight = true
+			break
+		}
+	}
+	if !foundNight {
+		t.Fatal("expected at least one nighttime icon suffix")
+	}
+	// Zero precip should be preserved when source has a reading.
+	foundZeroRain := false
+	for _, it := range out.List {
+		if it.Rain != nil && it.Rain.H1 == 0 {
+			foundZeroRain = true
+			break
+		}
+	}
+	if !foundZeroRain {
+		t.Fatal("expected rain:0 when source has explicit zero")
 	}
 }
 

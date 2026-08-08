@@ -14,6 +14,7 @@ import (
 	"github.com/bmikuska/shmu-weather-api/internal/shmu"
 	"github.com/bmikuska/shmu-weather-api/internal/store"
 	"github.com/bmikuska/shmu-weather-api/internal/syncer"
+	"github.com/bmikuska/shmu-weather-api/internal/transform"
 )
 
 func main() {
@@ -25,6 +26,10 @@ func main() {
 		logger.Fatalf("database: %v", err)
 	}
 	defer st.Close()
+
+	if err := st.EnsureForecastRenderVersion(context.Background(), transform.ForecastRenderVersion); err != nil {
+		logger.Fatalf("forecast render version: %v", err)
+	}
 
 	client := shmu.NewClient(cfg.SHMUBaseURL, cfg.SHMUDataBaseURL, cfg.HTTPTimeout)
 	syn := syncer.New(cfg, client, st, logger)

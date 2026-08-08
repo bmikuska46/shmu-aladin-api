@@ -1,8 +1,9 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
-	// "encoding/xml" // XML responses disabled for now; re-enable with wantsXML/write below
 	"errors"
 	"fmt"
 	"math"
@@ -12,26 +13,33 @@ import (
 	"time"
 
 	"github.com/bmikuska/shmu-weather-api/internal/config"
+	"github.com/bmikuska/shmu-weather-api/internal/geo"
+	"github.com/bmikuska/shmu-weather-api/internal/indicator"
 	"github.com/bmikuska/shmu-weather-api/internal/model"
 	"github.com/bmikuska/shmu-weather-api/internal/store"
 	"github.com/bmikuska/shmu-weather-api/internal/syncer"
+	"github.com/bmikuska/shmu-weather-api/internal/transform"
 )
 
+const maxDistanceKmCap = 500
+
 type Server struct {
-	store   *store.Store
-	syncer  *syncer.Syncer
-	mux     *http.ServeMux
-	limiter *routeLimiter
-	webURL  string
+	store      *store.Store
+	syncer     *syncer.Syncer
+	mux        *http.ServeMux
+	limiter    *routeLimiter
+	webURL     string
+	staleAfter time.Duration
 }
 
 func New(st *store.Store, syn *syncer.Syncer, cfg config.Config) *Server {
 	s := &Server{
-		store:   st,
-		syncer:  syn,
-		mux:     http.NewServeMux(),
-		limiter: newRouteLimiter(cfg.RateLimit, cfg.RateLimitWindow),
-		webURL:  cfg.WebURL,
+		store:      st,
+		syncer:     syn,
+		mux:        http.NewServeMux(),
+		limiter:    newRouteLimiter(cfg.RateLimit, cfg.RateLimitWindow),
+		webURL:     cfg.WebURL,
+		staleAfter: cfg.ForecastStaleAfter,
 	}
 	s.routes()
 	return s
@@ -54,14 +62,16 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/stations", s.handleListStations)
 	s.mux.HandleFunc("GET /api/v1/stations/{id}", s.handleGetStation)
 	s.mux.HandleFunc("GET /api/v1/forecast", s.handleForecast)
+	s.mux.HandleFunc("GET /api/v1/forecast/daily", s.handleDailyForecast)
 	s.mux.HandleFunc("GET /api/v1/weather", s.handleForecast) // alias
+	s.mux.HandleFunc("GET /api/v1/indicators", s.handleIndicators)
 }
 
 func (s *Server) withMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, If-None-Match")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -115,8 +125,18 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request) {
 			},
 			{
 				"method":      "GET",
+				"path":        "/api/v1/forecast/daily?station={id}|lat={lat}&lon={lon}",
+				"description": "Daily summaries aggregated from the hourly ALADIN forecast",
+			},
+			{
+				"method":      "GET",
 				"path":        "/api/v1/weather?station={id}|lat={lat}&lon={lon}",
 				"description": "Alias of /api/v1/forecast",
+			},
+			{
+				"method":      "GET",
+				"path":        "/api/v1/indicators?station={id}|lat={lat}&lon={lon}",
+				"description": "API-derived non-official weather indicators from the hourly ALADIN forecast",
 			},
 		},
 	})
@@ -170,13 +190,13 @@ func (s *Server) handleGetStation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
-	stationID, status, msg := s.resolveForecastStation(r)
+	res, status, msg := s.resolveLocation(r)
 	if status != 0 {
 		writeError(w, r, status, msg)
 		return
 	}
 
-	exists, err := s.store.StationExists(r.Context(), stationID)
+	exists, err := s.store.StationExists(r.Context(), res.StationID)
 	if err != nil {
 		writeError(w, r, http.StatusInternalServerError, "failed to validate station")
 		return
@@ -186,22 +206,61 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cf, err := s.syncer.LoadCurrentForecast(r.Context(), stationID)
+	cf, err := s.syncer.LoadCurrentForecast(r.Context(), res.StationID)
 	if err != nil {
 		writeError(w, r, http.StatusBadGateway, "failed to load forecast")
 		return
 	}
 
-	cntStr := r.URL.Query().Get("cnt")
-	if cntStr != "" {
-		if cnt, err := strconv.Atoi(cntStr); err == nil && cnt > 0 {
-			s.writeForecastWithCnt(w, r, cf, cnt)
-			return
-		}
+	cnt, ok, cntMsg := parseOptionalCnt(r.URL.Query().Get("cnt"))
+	if !ok {
+		writeError(w, r, http.StatusBadRequest, cntMsg)
+		return
 	}
 
+	needsRewrite := res.Match != nil || cnt > 0
+	if needsRewrite {
+		var resp model.ForecastResponse
+		if err := json.Unmarshal(cf.ResponseJSON, &resp); err != nil {
+			writeError(w, r, http.StatusInternalServerError, "corrupt forecast cache")
+			return
+		}
+		if cnt > 0 && cnt < resp.Cnt {
+			resp.List = resp.List[:cnt]
+			resp.Cnt = cnt
+		}
+		if res.Match != nil {
+			res.Match.MatchedElevation = resp.City.Elevation
+			// Attach as a top-level extension via a wrapper map to avoid changing
+			// the stored ForecastResponse type used by station-ID cache hits.
+			payload := forecastWithMatch{ForecastResponse: resp, LocationMatch: res.Match}
+			etag := etagFor(payload)
+			if checkConditional(w, r, etag) {
+				return
+			}
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			w.Header().Set("X-Cache", "STORE")
+			write(w, r, http.StatusOK, payload)
+			return
+		}
+		etag := etagFor(resp)
+		if checkConditional(w, r, etag) {
+			return
+		}
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		w.Header().Set("X-Cache", "STORE")
+		write(w, r, http.StatusOK, resp)
+		return
+	}
+
+	if checkConditional(w, r, cf.ETag) {
+		return
+	}
 	w.Header().Set("ETag", cf.ETag)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
 	w.Header().Set("X-Cache", "STORE")
 
 	if acceptsGzip(r) && len(cf.ResponseGzip) > 0 {
@@ -216,46 +275,222 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(cf.ResponseJSON)
 }
 
-// resolveForecastStation returns a station ID from either ?station= or ?lat=&lon= (nearest station).
-// On failure status is a non-zero HTTP status code.
-func (s *Server) resolveForecastStation(r *http.Request) (int64, int, string) {
+type forecastWithMatch struct {
+	model.ForecastResponse
+	LocationMatch *model.LocationMatch `json:"location_match"`
+}
+
+func (s *Server) handleDailyForecast(w http.ResponseWriter, r *http.Request) {
+	res, status, msg := s.resolveLocation(r)
+	if status != 0 {
+		writeError(w, r, status, msg)
+		return
+	}
+
+	days, ok, daysMsg := parseOptionalDays(r.URL.Query().Get("days"))
+	if !ok {
+		writeError(w, r, http.StatusBadRequest, daysMsg)
+		return
+	}
+
+	hourly, cf, err := s.loadHourlyForecast(r, res.StationID)
+	if err != nil {
+		writeForecastLoadError(w, r, err)
+		return
+	}
+
+	availableDays := countLocalDays(hourly.List)
+	if days > 0 && days > availableDays {
+		writeError(w, r, http.StatusBadRequest, fmt.Sprintf("query parameter 'days' exceeds available forecast horizon (%d day(s))", availableDays))
+		return
+	}
+
+	resp := transform.AggregateDaily(hourly, days)
+	resp.Source = s.sourceMeta(cf)
+	if res.Match != nil {
+		res.Match.MatchedElevation = hourly.City.Elevation
+		resp.LocationMatch = res.Match
+	}
+
+	etag := etagFor(resp)
+	if checkConditional(w, r, etag) {
+		return
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("X-Cache", "STORE")
+	write(w, r, http.StatusOK, resp)
+}
+
+func (s *Server) handleIndicators(w http.ResponseWriter, r *http.Request) {
+	res, status, msg := s.resolveLocation(r)
+	if status != 0 {
+		writeError(w, r, status, msg)
+		return
+	}
+
+	types := parseTypeFilter(r.URL.Query().Get("type"))
+	hourly, cf, err := s.loadHourlyForecast(r, res.StationID)
+	if err != nil {
+		writeForecastLoadError(w, r, err)
+		return
+	}
+
+	list, err := indicator.Evaluate(hourly, types)
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	resp := model.IndicatorsResponse{
+		Code:    "200",
+		Message: 0,
+		Cnt:     len(list),
+		List:    list,
+		City:    hourly.City,
+		Meta:    hourly.Meta,
+		Source:  s.sourceMeta(cf),
+	}
+	if res.Match != nil {
+		res.Match.MatchedElevation = hourly.City.Elevation
+		resp.LocationMatch = res.Match
+	}
+
+	etag := etagFor(resp)
+	if checkConditional(w, r, etag) {
+		return
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("X-Cache", "STORE")
+	write(w, r, http.StatusOK, resp)
+}
+
+func (s *Server) loadHourlyForecast(r *http.Request, stationID int64) (model.ForecastResponse, store.CurrentForecast, error) {
+	exists, err := s.store.StationExists(r.Context(), stationID)
+	if err != nil {
+		return model.ForecastResponse{}, store.CurrentForecast{}, err
+	}
+	if !exists {
+		return model.ForecastResponse{}, store.CurrentForecast{}, store.ErrNotFound
+	}
+	cf, err := s.syncer.LoadCurrentForecast(r.Context(), stationID)
+	if err != nil {
+		return model.ForecastResponse{}, store.CurrentForecast{}, err
+	}
+	var resp model.ForecastResponse
+	if err := json.Unmarshal(cf.ResponseJSON, &resp); err != nil {
+		return model.ForecastResponse{}, store.CurrentForecast{}, fmt.Errorf("corrupt forecast cache: %w", err)
+	}
+	return resp, cf, nil
+}
+
+func writeForecastLoadError(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, r, http.StatusNotFound, "station not found")
+		return
+	}
+	if strings.Contains(err.Error(), "corrupt") {
+		writeError(w, r, http.StatusInternalServerError, "corrupt forecast cache")
+		return
+	}
+	writeError(w, r, http.StatusBadGateway, "failed to load forecast")
+}
+
+func (s *Server) sourceMeta(cf store.CurrentForecast) model.SourceMeta {
+	fresh := geo.ForecastFreshness(cf.FetchedAt, time.Now().UTC(), s.staleAfter)
+	runtime := ""
+	if cf.RuntimeTS > 0 {
+		runtime = time.Unix(cf.RuntimeTS, 0).UTC().Format(time.RFC3339)
+	}
+	fetched := ""
+	if !fresh.FetchedAt.IsZero() {
+		fetched = fresh.FetchedAt.Format(time.RFC3339)
+	}
+	return model.SourceMeta{
+		Source:     "SHMU ALADIN",
+		Kind:       "forecast",
+		Runtime:    runtime,
+		FetchedAt:  fetched,
+		AgeSeconds: fresh.AgeSeconds,
+		IsStale:    fresh.IsStale,
+	}
+}
+
+// locationResult is the resolved station for a forecast-style request.
+type locationResult struct {
+	StationID int64
+	Match     *model.LocationMatch
+}
+
+func (s *Server) resolveLocation(r *http.Request) (locationResult, int, string) {
 	q := r.URL.Query()
 	hasStation := q.Has("station")
 	hasLat := q.Has("lat") || q.Has("latitude")
 	hasLon := q.Has("lon") || q.Has("longitude")
 
+	if q.Has("elevation") || q.Has("alt") || q.Has("altitude") {
+		return locationResult{}, http.StatusBadRequest, "elevation is not supported; forecasts are not elevation-corrected"
+	}
+
+	maxDist, hasMaxDist, maxMsg := parseMaxDistanceKm(q.Get("max_distance_km"))
+	if maxMsg != "" {
+		return locationResult{}, http.StatusBadRequest, maxMsg
+	}
+
 	if hasStation && (hasLat || hasLon) {
-		return 0, http.StatusBadRequest, "provide either 'station' or 'lat' and 'lon', not both"
+		return locationResult{}, http.StatusBadRequest, "provide either 'station' or 'lat' and 'lon', not both"
 	}
 	if hasStation {
+		if hasMaxDist {
+			return locationResult{}, http.StatusBadRequest, "query parameter 'max_distance_km' is only valid with lat/lon"
+		}
 		id, ok, msg := parseStationQuery(q.Get("station"))
 		if !ok {
-			return 0, http.StatusBadRequest, msg
+			return locationResult{}, http.StatusBadRequest, msg
 		}
-		return id, 0, ""
+		return locationResult{StationID: id}, 0, ""
 	}
 	if hasLat || hasLon {
 		if !hasLat || !hasLon {
-			return 0, http.StatusBadRequest, "query parameters 'lat' and 'lon' are both required"
+			return locationResult{}, http.StatusBadRequest, "query parameters 'lat' and 'lon' are both required"
 		}
 		lat, ok, msg := parseCoord(firstNonEmpty(q.Get("lat"), q.Get("latitude")), "lat", -90, 90)
 		if !ok {
-			return 0, http.StatusBadRequest, msg
+			return locationResult{}, http.StatusBadRequest, msg
 		}
 		lon, ok, msg := parseCoord(firstNonEmpty(q.Get("lon"), q.Get("longitude")), "lon", -180, 180)
 		if !ok {
-			return 0, http.StatusBadRequest, msg
+			return locationResult{}, http.StatusBadRequest, msg
 		}
-		st, err := s.store.FindNearestStation(r.Context(), lat, lon)
+		nearest, err := s.store.FindNearestStation(r.Context(), lat, lon)
 		if errors.Is(err, store.ErrNotFound) {
-			return 0, http.StatusNotFound, "no stations available"
+			return locationResult{}, http.StatusNotFound, "no stations available"
 		}
 		if err != nil {
-			return 0, http.StatusInternalServerError, "failed to find nearest station"
+			return locationResult{}, http.StatusInternalServerError, "failed to find nearest station"
 		}
-		return st.ID, 0, ""
+		if hasMaxDist && nearest.DistanceKm > maxDist {
+			return locationResult{}, http.StatusNotFound, fmt.Sprintf(
+				"nearest station is %.1f km away (max_distance_km=%.1f)", nearest.DistanceKm, maxDist)
+		}
+		match := &model.LocationMatch{
+			Method:             "nearest_aladin_station",
+			RequestedCoord:     model.Coord{Lat: lat, Lon: lon},
+			MatchedCoord:       model.Coord{Lat: nearest.Station.Lat, Lon: nearest.Station.Lon},
+			DistanceKm:         nearest.DistanceKm,
+			MatchedStationID:   nearest.Station.ID,
+			MatchedStationName: nearest.Station.Name,
+		}
+		return locationResult{StationID: nearest.Station.ID, Match: match}, 0, ""
 	}
-	return 0, http.StatusBadRequest, "query parameter 'station' or both 'lat' and 'lon' is required"
+	return locationResult{}, http.StatusBadRequest, "query parameter 'station' or both 'lat' and 'lon' is required"
+}
+
+// resolveForecastStation kept for older tests; wraps resolveLocation.
+func (s *Server) resolveForecastStation(r *http.Request) (int64, int, string) {
+	res, status, msg := s.resolveLocation(r)
+	return res.StationID, status, msg
 }
 
 func parseStationQuery(raw string) (int64, bool, string) {
@@ -285,6 +520,69 @@ func parseCoord(raw, name string, min, max float64) (float64, bool, string) {
 	return v, true, ""
 }
 
+func parseMaxDistanceKm(raw string) (float64, bool, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, false, ""
+	}
+	v, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(v) || math.IsInf(v, 0) || v <= 0 {
+		return 0, false, "query parameter 'max_distance_km' must be a positive number"
+	}
+	if v > maxDistanceKmCap {
+		return 0, false, fmt.Sprintf("query parameter 'max_distance_km' must be at most %d", maxDistanceKmCap)
+	}
+	return v, true, ""
+}
+
+func parseOptionalCnt(raw string) (int, bool, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, true, ""
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, false, "query parameter 'cnt' must be a positive integer"
+	}
+	return n, true, ""
+}
+
+func parseOptionalDays(raw string) (int, bool, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, true, ""
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, false, "query parameter 'days' must be a positive integer"
+	}
+	return n, true, ""
+}
+
+func parseTypeFilter(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func countLocalDays(list []model.ForecastItem) int {
+	seen := map[string]bool{}
+	for _, it := range list {
+		seen[geo.LocalDateString(it.DT)] = true
+	}
+	return len(seen)
+}
+
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
 		if strings.TrimSpace(v) != "" {
@@ -306,20 +604,6 @@ func parsePositiveInt(s string) (int64, bool) {
 	return id, true
 }
 
-func (s *Server) writeForecastWithCnt(w http.ResponseWriter, r *http.Request, cf store.CurrentForecast, cnt int) {
-	var resp model.ForecastResponse
-	if err := json.Unmarshal(cf.ResponseJSON, &resp); err != nil {
-		writeError(w, r, http.StatusInternalServerError, "corrupt forecast cache")
-		return
-	}
-	if cnt < resp.Cnt {
-		resp.List = resp.List[:cnt]
-		resp.Cnt = cnt
-	}
-	w.Header().Set("X-Cache", "STORE")
-	write(w, r, http.StatusOK, resp)
-}
-
 func acceptsGzip(r *http.Request) bool {
 	for _, part := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
 		encoding := strings.TrimSpace(strings.SplitN(part, ";", 2)[0])
@@ -330,32 +614,33 @@ func acceptsGzip(r *http.Request) bool {
 	return false
 }
 
-// XML support kept for later — uncomment encoding/xml import + these helpers to restore.
-//
-// func wantsXML(r *http.Request) bool {
-// 	mode := strings.ToLower(r.URL.Query().Get("mode"))
-// 	if mode == "xml" {
-// 		return true
-// 	}
-// 	if mode == "json" {
-// 		return false
-// 	}
-// 	accept := r.Header.Get("Accept")
-// 	return strings.Contains(accept, "application/xml") || strings.Contains(accept, "text/xml")
-// }
+func checkConditional(w http.ResponseWriter, r *http.Request, etag string) bool {
+	inm := strings.TrimSpace(r.Header.Get("If-None-Match"))
+	if inm == "" || etag == "" {
+		return false
+	}
+	for _, part := range strings.Split(inm, ",") {
+		if strings.TrimSpace(part) == etag {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			w.WriteHeader(http.StatusNotModified)
+			return true
+		}
+	}
+	return false
+}
+
+func etagFor(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return `"` + hex.EncodeToString(sum[:16]) + `"`
+}
 
 func write(w http.ResponseWriter, r *http.Request, status int, v any) {
-	// JSON only for now.
-	// if wantsXML(r) {
-	// 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	// 	w.WriteHeader(status)
-	// 	_, _ = w.Write([]byte(xml.Header))
-	// 	enc := xml.NewEncoder(w)
-	// 	enc.Indent("", "  ")
-	// 	_ = enc.Encode(v)
-	// 	return
-	// }
-	_ = r // reserved for future format negotiation (XML)
+	_ = r
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	enc := json.NewEncoder(w)

@@ -22,6 +22,7 @@ $env:DATABASE_PATH="data/shmu.db"
 $env:STATIONS_CACHE_TTL="168h"      # 7 days
 $env:FORECAST_SYNC_EVERY="30m"
 $env:SYNC_FORECASTS="false"         # skip bulk prefetch; fetch on demand
+$env:FORECAST_STALE_AFTER="8h"      # mark derived responses stale after this age
 go run ./cmd/server
 ```
 
@@ -44,7 +45,9 @@ Slovak documentation is available at `/` and `/docs`. The English version is at 
 | `GET` | `/api/v1/stations` | Paginated station list + search |
 | `GET` | `/api/v1/stations/{id}` | Single station |
 | `GET` | `/api/v1/forecast?station={id}` or `?lat=&lon=` | Latest ALADIN forecast, next 3 days (OWM-like); coordinates resolve to the nearest station |
+| `GET` | `/api/v1/forecast/daily?...` | Daily summaries aggregated from the hourly forecast |
 | `GET` | `/api/v1/weather?...` | Alias of forecast |
+| `GET` | `/api/v1/indicators?...` | Derived (non-official) weather risk indicators |
 
 ### Stations
 
@@ -66,8 +69,29 @@ GET /api/v1/forecast?lat=48.15&lon=17.11
 GET /api/v1/forecast?lat=48.15&lon=17.11&cnt=24
 ```
 
-Provide either `station` (station ID) or both `lat` and `lon` (WGS84). With coordinates, the API picks the nearest station and returns that station’s forecast (`city` in the response is still the matched station).
-Example shape:
+Provide either `station` (station ID) or both `lat` and `lon` (WGS84). With coordinates, the API picks the nearest station and returns that station’s forecast (`city` in the response is still the matched station) plus `location_match` (distance in km, station elevation). Optional `max_distance_km` (max 500) returns `404` when the nearest station is too far. An `elevation` query parameter is rejected — forecasts are not elevation-corrected.
+
+### Daily summary
+
+```
+GET /api/v1/forecast/daily?station=32737
+GET /api/v1/forecast/daily?lat=48.15&lon=17.11&days=3
+```
+
+Aggregates hourly steps by `Europe/Bratislava` calendar day: min/max temperature, precipitation totals (total / liquid / snowfall water equivalent), precipitation hours, max wind and gust, mean cloud cover, representative weather, sunrise/sunset, and `is_partial`.
+
+`precipitation_total` sums the hourly Total precipitation series; `rain_total` estimates liquid as max(0, total − snowfall); `snow_total` is snowfall water equivalent. Missing inputs are `null`, never silent zeroes.
+
+### Indicators (non-official)
+
+```
+GET /api/v1/indicators?station=32737
+GET /api/v1/indicators?lat=49.12&lon=20.06&type=frost,wind,heavy_rain
+```
+
+v1 types: `frost`, `heat`, `wind`, `heavy_rain`, `snow`, `mixed_precipitation`, `low_cloud_mountain`. Every item has `official: false` and `source_kind: "forecast"` — these are not official SHMU warnings.
+
+Example hourly forecast shape:
 
 ```json
 {
@@ -124,9 +148,11 @@ ALADIN runs typically appear 3×/day (`00`, `06`, `12` / `18` depending on avail
 ```
 cmd/server/          HTTP server + background sync
 internal/api/        Handlers (JSON)
+internal/geo/        Timezone, sunrise/sunset, Haversine, freshness
+internal/indicator/  Derived non-official risk rules
 internal/shmu/       Upstream SHMU client
 internal/store/      SQLite + FTS5
-internal/transform/  ALADIN → OWM-like mapping
+internal/transform/  ALADIN → OWM-like mapping + daily aggregation
 internal/syncer/     Ingest / refresh worker
 internal/normalize/  Diacritic folding for search
 ```
