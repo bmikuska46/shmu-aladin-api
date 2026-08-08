@@ -46,7 +46,7 @@ func New(st *store.Store, syn *syncer.Syncer, cfg config.Config) *Server {
 }
 
 func (s *Server) Handler() http.Handler {
-	return s.withMiddleware(s.mux)
+	return s.withMetrics(s.withMiddleware(s.mux))
 }
 
 func (s *Server) routes() {
@@ -57,6 +57,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /robots.txt", s.handleRobotsTxt)
 	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
 	s.mux.HandleFunc("GET /health", s.handleHealth)
+	s.mux.Handle("GET /metrics", metricsHandler())
 	s.mux.HandleFunc("GET /api/v1", s.handleAPIIndex)
 	s.mux.HandleFunc("GET /api/v1/{$}", s.handleAPIIndex)
 	s.mux.HandleFunc("GET /api/v1/stations", s.handleListStations)
@@ -79,8 +80,8 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		}
 
 		route := routeBucketKey(r)
-		// Keep docs and health probes unbounded.
-		if route != "GET /health" && route != "GET /" && route != "GET /docs" && route != "GET /en" && route != "GET /robots.txt" && route != "GET /sitemap.xml" {
+		// Keep docs, health, and metrics scrapes unbounded.
+		if route != "GET /health" && route != "GET /metrics" && route != "GET /" && route != "GET /docs" && route != "GET /en" && route != "GET /robots.txt" && route != "GET /sitemap.xml" {
 			key := clientIP(r) + "|" + route
 			ok, remaining, retryAfter := s.limiter.allow(key, time.Now())
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(s.limiter.limit))
@@ -192,6 +193,7 @@ func (s *Server) handleGetStation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusInternalServerError, "failed to get station")
 		return
 	}
+	recordStationRequest(st.ID, "stations", "path")
 	write(w, r, http.StatusOK, st)
 }
 
@@ -223,6 +225,9 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, hoursMsg)
 		return
 	}
+
+	recordStationRequest(res.StationID, forecastEndpointLabel(r.URL.Path), stationLookupMode(res.Match))
+	recordForecastHoursRequested(hours)
 
 	needsRewrite := res.Match != nil || hours > 0
 	if needsRewrite {
@@ -322,6 +327,9 @@ func (s *Server) handleDailyForecast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	recordStationRequest(res.StationID, "forecast_daily", stationLookupMode(res.Match))
+	recordForecastDaysRequested(days)
+
 	resp := transform.AggregateDaily(hourly, days)
 	resp.Source = s.sourceMeta(cf)
 	if res.Match != nil {
@@ -358,6 +366,8 @@ func (s *Server) handleIndicators(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
+
+	recordStationRequest(res.StationID, "indicators", stationLookupMode(res.Match))
 
 	resp := model.IndicatorsResponse{
 		Code:    "200",
@@ -562,6 +572,15 @@ func parseOptionalHours(raw string) (int, bool, string) {
 		return 0, false, "query parameter 'hours' must be a positive integer"
 	}
 	return n, true, ""
+}
+
+func forecastEndpointLabel(path string) string {
+	switch path {
+	case "/api/v1/weather":
+		return "weather"
+	default:
+		return "forecast"
+	}
 }
 
 func parseOptionalDays(raw string) (int, bool, string) {
