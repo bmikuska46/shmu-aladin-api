@@ -36,6 +36,8 @@ func TestResolveForecastStation(t *testing.T) {
 		wantStatus int
 	}{
 		{name: "station", query: "station=32737", wantID: 32737},
+		{name: "stationId alias", query: "stationId=32737", wantID: 32737},
+		{name: "station_id alias", query: "station_id=32737", wantID: 32737},
 		{name: "lat lon", query: "lat=48.15&lon=17.10", wantID: 32737},
 		{name: "latitude longitude aliases", query: "latitude=48.15&longitude=17.10", wantID: 32737},
 		{name: "missing", query: "", wantStatus: http.StatusBadRequest},

@@ -52,6 +52,7 @@ func TestAPIIndex(t *testing.T) {
 				"/api/v1/stations/{id}",
 				"/api/v1/forecast?station={id}|lat={lat}&lon={lon}",
 				"/api/v1/forecast/daily?station={id}|lat={lat}&lon={lon}",
+				"/api/v1/now?station={id}|lat={lat}&lon={lon}",
 				"/api/v1/weather?station={id}|lat={lat}&lon={lon}",
 				"/api/v1/weather/codes",
 				"/api/v1/indicators?station={id}|lat={lat}&lon={lon}",

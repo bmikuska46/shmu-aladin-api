@@ -377,6 +377,7 @@
       <a class="endpoint-link" href="#station-detail"><span class="mini-method">GET</span><span>/stations/{id}</span></a>
       <a class="endpoint-link" href="#forecast"><span class="mini-method">GET</span><span>/forecast</span></a>
       <a class="endpoint-link" href="#forecast-daily"><span class="mini-method">GET</span><span>/forecast/daily</span></a>
+      <a class="endpoint-link" href="#now"><span class="mini-method">GET</span><span>/now</span></a>
       <a class="endpoint-link" href="#weather-codes"><span class="mini-method">GET</span><span>/weather/codes</span></a>
       <a class="endpoint-link" href="#indicators"><span class="mini-method">GET</span><span>/indicators</span></a>
     </div>
@@ -636,6 +637,60 @@
     "name": "Bratislava (centrum)",
     "coord": { "lat": 48.156, "lon": 17.105 },
     "country": "SK"
+  }
+}</code></pre>
+              </div>
+            </div>
+          </article>
+
+          <article class="endpoint" id="now">
+            <div class="endpoint-head"><span class="method">GET</span><code class="path">/api/v1/now</code></div>
+            <div class="endpoint-body">
+              <p>Aktuálne počasie ako hodinový krok ALADIN najbližší k momentu požiadavky. Nie je to živé meranie zo stanice — ide o modelovú predpoveď pre „teraz“. Zadajte buď <code class="inline-code">station</code> / <code class="inline-code">stationId</code>, alebo <code class="inline-code">lat</code> a <code class="inline-code">lon</code>.</p>
+              <table class="params">
+                <thead><tr><th>Parameter</th><th>Popis</th></tr></thead>
+                <tbody>
+                  <tr><td><code>station</code> / <code>stationId</code> / <code>lat</code>+<code>lon</code></td><td>Rovnaké pravidlá ako pri hodinovej predpovedi.</td></tr>
+                  <tr><td><code>max_distance_km</code></td><td>Maximálna vzdialenosť pri súradniciach.</td></tr>
+                </tbody>
+              </table>
+              <div class="code-block">
+                <div class="code-label">curl</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>curl "__WEB_URL__/api/v1/now?station=32737"</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">PowerShell</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>Invoke-RestMethod "__WEB_URL__/api/v1/now?lat=48.15&amp;lon=17.11" |
+  ConvertTo-Json -Depth 6</code></pre>
+              </div>
+              <div class="code-block">
+                <div class="code-label">Ukážka odpovede</div>
+                <button class="copy-button" type="button">Kopírovať</button>
+                <pre><code>{
+  "code": "200",
+  "as_of": "2026-08-10T17:19:00Z",
+  "offset_seconds": -1140,
+  "current": {
+    "dt": 1786377600,
+    "dt_txt": "2026-08-10 17:00:00",
+    "date": "2026-08-10",
+    "date_index": 0,
+    "main": { "temp": 24.1, "pressure": 1014.2 },
+    "weather": [{ "code": "few_clouds", "description": "few clouds" }],
+    "clouds": { "all": 22.5 },
+    "wind": { "speed": 3.4, "deg": 280.1 }
+  },
+  "city": {
+    "name": "Bratislava (centrum)",
+    "coord": { "lat": 48.156, "lon": 17.105 },
+    "country": "SK"
+  },
+  "source_meta": {
+    "source": "SHMU ALADIN",
+    "kind": "forecast",
+    "is_stale": false
   }
 }</code></pre>
               </div>

@@ -46,6 +46,7 @@ Slovak documentation is available at `/` and `/docs`. The English version is at 
 | `GET` | `/api/v1/stations/{id}` | Single station |
 | `GET` | `/api/v1/forecast?station={id}` or `?lat=&lon=` | Latest ALADIN forecast, next 3 days (OWM-like); coordinates resolve to the nearest station |
 | `GET` | `/api/v1/forecast/daily?...` | Daily summaries aggregated from the hourly forecast |
+| `GET` | `/api/v1/now?...` | Current weather (hourly ALADIN step closest to now) |
 | `GET` | `/api/v1/weather?...` | Alias of forecast |
 | `GET` | `/api/v1/weather/codes` | Catalog of weather enums (`code` + `description`) |
 | `GET` | `/api/v1/indicators?...` | Derived (non-official) weather risk indicators |
@@ -70,7 +71,7 @@ GET /api/v1/forecast?lat=48.15&lon=17.11
 GET /api/v1/forecast?lat=48.15&lon=17.11&hours=24
 ```
 
-Provide either `station` (station ID) or both `lat` and `lon` (WGS84). With coordinates, the API picks the nearest station and returns that station’s forecast (`city` in the response is still the matched station) plus `location_match` (distance in km, station elevation). Optional `max_distance_km` (max 500) returns `404` when the nearest station is too far. An `elevation` query parameter is rejected — forecasts are not elevation-corrected.
+Provide either `station` (station ID) or both `lat` and `lon` (WGS84). With coordinates, the API picks the nearest station and returns that station’s forecast (`city` in the response is still the matched station) plus `location_match` (distance in km, station elevation). Optional `max_distance_km` (max 500) returns `404` when the nearest station is too far. An `elevation` query parameter is rejected — forecasts are not elevation-corrected. Optional `hours` limits the list to N steps from the current UTC hour (not from the model run start).
 
 Each hourly step includes a local `date` (Europe/Bratislava) and `date_index` (0 = Monday … 6 = Sunday). Weather is `{ "code", "description" }`; the full catalog is available at `GET /api/v1/weather/codes`.
 
@@ -84,6 +85,16 @@ GET /api/v1/forecast/daily?lat=48.15&lon=17.11&days=3
 Aggregates hourly steps by `Europe/Bratislava` calendar day: min/max temperature, precipitation totals (total / liquid / snowfall water equivalent), precipitation hours, max wind and gust, mean cloud cover, representative weather, sunrise/sunset, and `is_partial`.
 
 `precipitation_total` sums the hourly Total precipitation series; `rain_total` estimates liquid as max(0, total − snowfall); `snow_total` is snowfall water equivalent. Missing inputs are `null`, never silent zeroes.
+
+### Current weather
+
+```
+GET /api/v1/now?station=32737
+GET /api/v1/now?stationId=32737
+GET /api/v1/now?lat=48.15&lon=17.11
+```
+
+Returns the hourly ALADIN step closest to the request time (`current`), plus `as_of` (request time UTC) and `offset_seconds` (`current.dt − as_of`). This is model guidance for “now”, not a live station observation.
 
 ### Indicators (non-official)
 

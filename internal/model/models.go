@@ -117,6 +117,20 @@ type DailyForecastDay struct {
 	IsPartial          bool        `json:"is_partial"`
 }
 
+// NowWeatherResponse is the hourly ALADIN step closest to the request time.
+// This is model guidance for "now", not a live weather-station observation.
+type NowWeatherResponse struct {
+	Code          string         `json:"code"`
+	Message       float64        `json:"message"`
+	AsOf          string         `json:"as_of"`
+	OffsetSeconds int64          `json:"offset_seconds"`
+	Current       ForecastItem   `json:"current"`
+	City          ForecastCity   `json:"city"`
+	Meta          ForecastMeta   `json:"meta"`
+	Source        SourceMeta     `json:"source_meta"`
+	LocationMatch *LocationMatch `json:"location_match,omitempty"`
+}
+
 // IndicatorsResponse holds API-derived, non-official weather risk indicators.
 type IndicatorsResponse struct {
 	Code          string         `json:"code"`

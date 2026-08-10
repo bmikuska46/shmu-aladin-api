@@ -46,6 +46,7 @@ Slovenská dokumentácia je dostupná na `/` a `/docs`. Anglická verzia je na `
 | `GET` | `/api/v1/stations/{id}` | Detail stanice |
 | `GET` | `/api/v1/forecast?station={id}` alebo `?lat=&lon=` | Najnovšia predpoveď ALADIN na 3 dni v štruktúre podobnej OWM; súradnice sa mapujú na najbližšiu stanicu |
 | `GET` | `/api/v1/forecast/daily?...` | Denné súhrny z hodinovej predpovede |
+| `GET` | `/api/v1/now?...` | Aktuálne počasie (hodinový krok ALADIN najbližší k „teraz“) |
 | `GET` | `/api/v1/weather?...` | Alias predpovede |
 | `GET` | `/api/v1/weather/codes` | Katalóg enumov počasia (`code` + `description`) |
 | `GET` | `/api/v1/indicators?...` | Odvodené (neoficiálne) indikátory rizika |
@@ -70,7 +71,7 @@ GET /api/v1/forecast?lat=48.15&lon=17.11
 GET /api/v1/forecast?lat=48.15&lon=17.11&hours=24
 ```
 
-Zadajte buď `station` (ID stanice), alebo `lat` a `lon` (WGS84). Pri súradniciach API vyberie najbližšiu stanicu a vráti jej predpoveď (`city` v odpovedi je stále nájdená stanica) spolu s `location_match` (vzdialenosť v km, nadmorská výška stanice). Voliteľne `max_distance_km` (max. 500) vráti `404`, ak je najbližšia stanica príliš ďaleko. Parameter `elevation` nie je podporovaný — predpoveď nie je korigovaná podľa výšky.
+Zadajte buď `station` (ID stanice), alebo `lat` a `lon` (WGS84). Pri súradniciach API vyberie najbližšiu stanicu a vráti jej predpoveď (`city` v odpovedi je stále nájdená stanica) spolu s `location_match` (vzdialenosť v km, nadmorská výška stanice). Voliteľne `max_distance_km` (max. 500) vráti `404`, ak je najbližšia stanica príliš ďaleko. Parameter `elevation` nie je podporovaný — predpoveď nie je korigovaná podľa výšky. Voliteľný `hours` obmedzí zoznam na N krokov od aktuálnej UTC hodiny (nie od začiatku behu modelu).
 
 Každý hodinový krok obsahuje lokálny `date` (Europe/Bratislava) a `date_index` (0 = pondelok … 6 = nedeľa). Počasie je `{ "code", "description" }`; zoznam všetkých kódov je na `GET /api/v1/weather/codes`.
 
@@ -84,6 +85,16 @@ GET /api/v1/forecast/daily?lat=48.15&lon=17.11&days=3
 Agregácia hodinových krokov podľa kalendárneho dňa `Europe/Bratislava`: min/max teplota, úhrny zrážok (celkové / kvapalné / snehový vodný ekvivalent), počet hodín so zrážkami, max. vietor a nárazy, priemerná oblačnosť, reprezentatívne počasie, východ/západ Slnka, príznak `is_partial`.
 
 `precipitation_total` je súčet hodinového poľa Total precipitation; `rain_total` je odhad kvapalnej zložky (total − snowfall, min. 0); `snow_total` je vodný ekvivalent snehu. Chýbajúce vstupy sa vracajú ako `null`, nie ako nula.
+
+### Aktuálne počasie
+
+```
+GET /api/v1/now?station=32737
+GET /api/v1/now?stationId=32737
+GET /api/v1/now?lat=48.15&lon=17.11
+```
+
+Vráti hodinový krok ALADIN najbližší k momentu požiadavky (`current`), plus `as_of` (čas požiadavky UTC) a `offset_seconds` (rozdiel `current.dt − as_of`). Nie je to živé meranie zo stanice — ide o modelovú predpoveď pre „teraz“.
 
 ### Indikátory (neoficiálne)
 

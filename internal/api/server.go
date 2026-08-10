@@ -64,6 +64,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/stations/{id}", s.handleGetStation)
 	s.mux.HandleFunc("GET /api/v1/forecast", s.handleForecast)
 	s.mux.HandleFunc("GET /api/v1/forecast/daily", s.handleDailyForecast)
+	s.mux.HandleFunc("GET /api/v1/now", s.handleNow)
 	s.mux.HandleFunc("GET /api/v1/weather", s.handleForecast) // alias
 	s.mux.HandleFunc("GET /api/v1/weather/codes", s.handleWeatherCodes)
 	s.mux.HandleFunc("GET /api/v1/indicators", s.handleIndicators)
@@ -129,6 +130,11 @@ func (s *Server) handleAPIIndex(w http.ResponseWriter, r *http.Request) {
 				"method":      "GET",
 				"path":        "/api/v1/forecast/daily?station={id}|lat={lat}&lon={lon}",
 				"description": "Daily summaries aggregated from the hourly ALADIN forecast",
+			},
+			{
+				"method":      "GET",
+				"path":        "/api/v1/now?station={id}|lat={lat}&lon={lon}",
+				"description": "Current weather as the hourly ALADIN step closest to now (by station ID or nearest station to coordinates)",
 			},
 			{
 				"method":      "GET",
@@ -236,9 +242,8 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusInternalServerError, "corrupt forecast cache")
 			return
 		}
-		if hours > 0 && hours < resp.Hours {
-			resp.List = resp.List[:hours]
-			resp.Hours = hours
+		if hours > 0 {
+			resp = transform.LimitForecastHours(resp, hours, time.Now().UTC())
 		}
 		if res.Match != nil {
 			res.Match.MatchedElevation = resp.City.Elevation
@@ -343,6 +348,43 @@ func (s *Server) handleDailyForecast(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Header().Set("X-Cache", "STORE")
+	write(w, r, http.StatusOK, resp)
+}
+
+func (s *Server) handleNow(w http.ResponseWriter, r *http.Request) {
+	res, status, msg := s.resolveLocation(r)
+	if status != 0 {
+		writeError(w, r, status, msg)
+		return
+	}
+
+	hourly, cf, err := s.loadHourlyForecast(r, res.StationID)
+	if err != nil {
+		writeForecastLoadError(w, r, err)
+		return
+	}
+
+	resp, err := transform.SelectNow(hourly, time.Now().UTC())
+	if err != nil {
+		writeError(w, r, http.StatusBadGateway, "forecast has no hourly steps")
+		return
+	}
+
+	recordStationRequest(res.StationID, "now", stationLookupMode(res.Match))
+
+	resp.Source = s.sourceMeta(cf)
+	if res.Match != nil {
+		res.Match.MatchedElevation = hourly.City.Elevation
+		resp.LocationMatch = res.Match
+	}
+
+	etag := etagFor(resp)
+	if checkConditional(w, r, etag) {
+		return
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", "public, max-age=60")
 	w.Header().Set("X-Cache", "STORE")
 	write(w, r, http.StatusOK, resp)
 }
@@ -452,7 +494,7 @@ type locationResult struct {
 
 func (s *Server) resolveLocation(r *http.Request) (locationResult, int, string) {
 	q := r.URL.Query()
-	hasStation := q.Has("station")
+	hasStation := q.Has("station") || q.Has("stationId") || q.Has("station_id")
 	hasLat := q.Has("lat") || q.Has("latitude")
 	hasLon := q.Has("lon") || q.Has("longitude")
 
@@ -472,7 +514,7 @@ func (s *Server) resolveLocation(r *http.Request) (locationResult, int, string) 
 		if hasMaxDist {
 			return locationResult{}, http.StatusBadRequest, "query parameter 'max_distance_km' is only valid with lat/lon"
 		}
-		id, ok, msg := parseStationQuery(q.Get("station"))
+		id, ok, msg := parseStationQuery(firstNonEmpty(q.Get("station"), q.Get("stationId"), q.Get("station_id")))
 		if !ok {
 			return locationResult{}, http.StatusBadRequest, msg
 		}

@@ -119,6 +119,8 @@ func metricsRoute(r *http.Request) string {
 		return "/api/v1/forecast"
 	case path == "/api/v1/forecast/daily":
 		return "/api/v1/forecast/daily"
+	case path == "/api/v1/now":
+		return "/api/v1/now"
 	case path == "/api/v1/weather":
 		return "/api/v1/weather"
 	case path == "/api/v1/weather/codes":
