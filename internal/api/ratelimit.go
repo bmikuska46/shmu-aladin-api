@@ -105,6 +105,8 @@ func metricsRoute(r *http.Request) string {
 		return "/robots.txt"
 	case path == "/sitemap.xml":
 		return "/sitemap.xml"
+	case staticAssets[path] != "":
+		return path
 	case path == "/health":
 		return "/health"
 	case path == "/metrics":

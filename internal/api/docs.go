@@ -8,8 +8,10 @@ import (
 	"github.com/bmikuska/shmu-weather-api/web"
 )
 
-const seoDescriptionSK = "Dokumentácia SHMU ALADIN API — predpoveď počasia na nasledujúce 3 dni z modelu ALADIN. JSON API so stanicami a hodinovými predpoveďami pre Slovensko."
-const seoDescriptionEN = "SHMU ALADIN API documentation — a 3-day weather forecast powered by the ALADIN model. JSON API with stations and hourly forecasts for Slovakia."
+const seoTitleSK = "SHMÚ API - predpoveď počasia pre Slovensko v JSON (ALADIN)"
+const seoTitleEN = "SHMU API - Slovak weather forecast JSON API (ALADIN)"
+const seoDescriptionSK = "SHMÚ API zadarmo a bez API kľúča: JSON predpoveď počasia pre Slovensko z modelu ALADIN. Hodinová aj denná predpoveď na 3 dni, aktuálne počasie a 1 000+ staníc."
+const seoDescriptionEN = "Free SHMU API with no API key: JSON weather forecasts for Slovakia from the SHMÚ ALADIN model. Hourly and daily 3-day forecasts, current weather and 1,000+ stations."
 
 func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 	s.writeDocs(w, false)
@@ -17,6 +19,28 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEnglishDocs(w http.ResponseWriter, r *http.Request) {
 	s.writeDocs(w, true)
+}
+
+// staticAssets maps root-level icon and manifest paths to their content types.
+var staticAssets = map[string]string{
+	"/favicon.ico":          "image/x-icon",
+	"/favicon-32x32.png":    "image/png",
+	"/apple-touch-icon.png": "image/png",
+	"/icon-192.png":         "image/png",
+	"/icon-512.png":         "image/png",
+	"/site.webmanifest":     "application/manifest+json",
+}
+
+func (s *Server) handleStaticAsset(w http.ResponseWriter, r *http.Request) {
+	body, err := web.Static.ReadFile("static" + r.URL.Path)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", staticAssets[r.URL.Path])
+	w.Header().Set("Cache-Control", "public, max-age=604800")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
 }
 
 func (s *Server) handleRobotsTxt(w http.ResponseWriter, r *http.Request) {
@@ -49,11 +73,6 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
-  <url>
-    <loc>%[1]s/docs</loc>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
-  </url>
 </urlset>
 `, base)
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
@@ -63,6 +82,19 @@ func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writeDocs(w http.ResponseWriter, english bool) {
+	body := s.docsSK
+	if english {
+		body = s.docsEN
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Language", map[bool]string{false: "sk", true: "en"}[english])
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+// renderDocs builds a docs page once; the result depends only on the language and webURL.
+func renderDocs(webURL string, english bool) []byte {
 	body := string(web.DocsHTML)
 	if english {
 		body = englishDocsReplacer.Replace(body)
@@ -82,22 +114,34 @@ func (s *Server) writeDocs(w http.ResponseWriter, english bool) {
 			"__LANG_LABEL__", "English",
 		).Replace(body)
 	}
-	body = strings.ReplaceAll(body, "__WEB_URL__", strings.TrimRight(s.webURL, "/"))
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Language", map[bool]string{false: "sk", true: "en"}[english])
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(body))
+	body = strings.ReplaceAll(body, "__WEB_URL__", strings.TrimRight(webURL, "/"))
+	return []byte(body)
 }
 
 var englishDocsReplacer = strings.NewReplacer(
 	`<html lang="sk">`, `<html lang="en">`,
-	`SHMU ALADIN API — Dokumentácia`, `SHMU ALADIN API — Documentation`,
+	seoTitleSK, seoTitleEN,
 	seoDescriptionSK, seoDescriptionEN,
 	`"og:locale" content="sk_SK"`, `"og:locale" content="en_US"`,
 	`"og:locale:alternate" content="en_US"`, `"og:locale:alternate" content="sk_SK"`,
 	`"inLanguage": "sk"`, `"inLanguage": "en"`,
-	`SHMU ALADIN API dokumentácia`, `SHMU ALADIN API documentation`,
+	`SHMU API dokumentácia`, `SHMU API documentation`,
+	`SHMÚ API: predpoveď počasia pre Slovensko`, `SHMU API: weather forecast for Slovakia`,
+	`Bezplatné JSON API nad dátami numerického modelu ALADIN od SHMÚ. Vyhľadávanie staníc, hodinová a denná predpoveď na 3 dni a aktuálne počasie bez registrácie a API kľúča.`, `A free JSON API for SHMÚ ALADIN numerical model data. Search stations and get hourly and daily 3-day forecasts and current weather with no sign-up and no API key.`,
+	`Čo je SHMÚ API`, `What is the SHMU API`,
+	`SHMÚ API (SHMU API) sprístupňuje predpovede počasia <a href="https://www.shmu.sk/" rel="noopener">Slovenského hydrometeorologického ústavu</a> v jednoduchom formáte JSON. SHMÚ zverejňuje výstupy modelu ALADIN ako dátové súbory. Táto služba ich pravidelne sťahuje, spracuje a ponúka cez REST endpointy s odpoveďami podobnými OpenWeatherMap.`, `The SHMU API (SHMÚ API) serves weather forecasts from the <a href="https://www.shmu.sk/" rel="noopener">Slovak Hydrometeorological Institute</a> as simple JSON. SHMÚ publishes ALADIN model output as data files. This service downloads them on a schedule, processes them and exposes them through REST endpoints with OpenWeatherMap-style responses.`,
+	`Ide o neoficiálny projekt s <a href="https://github.com/bmikuska46/shmu-aladin-api" rel="noopener">otvoreným zdrojovým kódom</a>, ktorý SHMÚ neprevádzkuje. Zdrojom všetkých predpovedí sú verejné dáta SHMÚ.`, `It is an unofficial <a href="https://github.com/bmikuska46/shmu-aladin-api" rel="noopener">open-source project</a> that is not operated by SHMÚ. All forecasts come from public SHMÚ data.`,
+	`Časté otázky`, `FAQ`,
+	`Je SHMÚ API zadarmo?`, `Is the SHMU API free?`,
+	`Áno. SHMÚ API je bezplatné a nevyžaduje registráciu ani API kľúč. Platí iba limit 10 požiadaviek za minútu pre každý endpoint a IP adresu.`, `Yes. The SHMU API is free and needs no sign-up or API key. The only limit is 10 requests per minute for each endpoint and IP address.`,
+	`Je to oficiálne API SHMÚ?`, `Is this the official SHMÚ API?`,
+	`Nie. Ide o neoficiálny open-source projekt, ktorý spracúva verejne dostupné dáta modelu ALADIN od SHMÚ. Neposkytuje oficiálne výstrahy SHMÚ.`, `No. It is an unofficial open-source project that processes publicly available SHMÚ ALADIN model data. It does not provide official SHMÚ warnings.`,
+	`Aké dáta SHMU API poskytuje?`, `What data does the SHMU API provide?`,
+	`Hodinovú a dennú predpoveď na 3 dni (teplota, vietor, oblačnosť, zrážky a tlak), aktuálne počasie, viac ako 1 000 staníc na Slovensku a odvodené indikátory ako mráz, horúčava alebo silný vietor.`, `Hourly and daily 3-day forecasts (temperature, wind, cloud cover, precipitation and pressure), current weather, more than 1,000 stations in Slovakia and derived indicators such as frost, heat or strong wind.`,
+	`Ako často sa predpoveď aktualizuje?`, `How often is the forecast updated?`,
+	`Model ALADIN beží štyrikrát denne (00, 06, 12 a 18 UTC). SHMÚ zverejňuje výsledky približne 4 hodiny po behu a API vracia najnovší dostupný beh.`, `The ALADIN model runs four times a day (00, 06, 12 and 18 UTC). SHMÚ publishes the results about 4 hours after each run and the API returns the latest available run.`,
+	`Dá sa predpoveď získať podľa GPS súradníc?`, `Can I get a forecast by GPS coordinates?`,
+	`Áno. Endpointy /forecast, /forecast/daily, /now a /indicators prijímajú parametre lat a lon a použijú najbližšiu stanicu modelu ALADIN.`, `Yes. The /forecast, /forecast/daily, /now and /indicators endpoints accept lat and lon parameters and use the nearest ALADIN model station.`,
 	`Dokumentácia&nbsp; / &nbsp;<strong>API referencia</strong>`, `Documentation&nbsp; / &nbsp;<strong>API reference</strong>`,
 	`aria-label="Otvoriť navigáciu"`, `aria-label="Open navigation"`,
 	`aria-label="Dokumentácia"`, `aria-label="Documentation"`,

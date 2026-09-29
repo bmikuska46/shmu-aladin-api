@@ -10,9 +10,16 @@ permissions:
   contents: read
   packages: write
 
+# Branch builds may be superseded by a newer commit; tag releases must finish.
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    # Repo variable RUNNER=self-hosted routes jobs to the Coolify runner; unset
+    # falls back to GitHub-hosted.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -46,5 +53,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Registry cache, not type=gha: it survives Actions cache eviction and
+          # is shared with any runner that can reach GHCR.
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}:buildcache,mode=max,image-manifest=true,oci-mediatypes=true
+          platforms: linux/amd64
