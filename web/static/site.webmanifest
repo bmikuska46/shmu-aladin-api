@@ -1,0 +1,13 @@
+{
+  "name": "SHMU API",
+  "short_name": "SHMU API",
+  "description": "JSON weather forecast API for Slovakia based on the SHMÚ ALADIN model.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#ffffff",
+  "theme_color": "#0b6bcb",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

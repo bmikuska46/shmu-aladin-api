@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -42,6 +43,12 @@ const (
 type Store struct {
 	write *sql.DB
 	read  *sql.DB
+
+	// stations mirrors the stations table (sorted by id) so hot lookups skip
+	// SQLite. UpsertStations is the only writer and reloads it after commit.
+	stationsMu sync.RWMutex
+	stations   []model.Station
+	stationIdx map[int64]int
 }
 
 func Open(path string) (*Store, error) {
@@ -66,6 +73,10 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("open reader: %w", err)
 	}
 	s.read = readDB
+	if err := s.reloadStations(context.Background()); err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("load stations: %w", err)
+	}
 	return s, nil
 }
 
@@ -127,6 +138,7 @@ CREATE TABLE IF NOT EXISTS stations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stations_name_folded ON stations(name_folded);
+CREATE INDEX IF NOT EXISTS idx_stations_name_nocase ON stations(name COLLATE NOCASE);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS stations_fts USING fts5(
   name_folded,
@@ -243,7 +255,42 @@ ON CONFLICT(id) DO UPDATE SET
 	if err := setMetaTx(ctx, tx, "stations_synced_at", now); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.reloadStations(ctx)
+}
+
+// reloadStations refreshes the in-memory station mirror from the database.
+func (s *Store) reloadStations(ctx context.Context) error {
+	rows, err := s.read.QueryContext(ctx, `
+SELECT id, name, lat, lon, district_code FROM stations ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var stations []model.Station
+	for rows.Next() {
+		var st model.Station
+		if err := rows.Scan(&st.ID, &st.Name, &st.Lat, &st.Lon, &st.DistrictCode); err != nil {
+			return err
+		}
+		stations = append(stations, st)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	idx := make(map[int64]int, len(stations))
+	for i, st := range stations {
+		idx[st.ID] = i
+	}
+	s.stationsMu.Lock()
+	s.stations = stations
+	s.stationIdx = idx
+	s.stationsMu.Unlock()
+	return nil
 }
 
 func (s *Store) StationsSyncedAt(ctx context.Context) (time.Time, bool, error) {
@@ -404,23 +451,20 @@ func truncateRunes(s string, max int) string {
 }
 
 func (s *Store) GetStation(ctx context.Context, id int64) (model.Station, error) {
-	var st model.Station
-	err := s.read.QueryRowContext(ctx, `
-SELECT id, name, lat, lon, district_code FROM stations WHERE id = ?`, id).
-		Scan(&st.ID, &st.Name, &st.Lat, &st.Lon, &st.DistrictCode)
-	if errors.Is(err, sql.ErrNoRows) {
+	s.stationsMu.RLock()
+	defer s.stationsMu.RUnlock()
+	i, ok := s.stationIdx[id]
+	if !ok {
 		return model.Station{}, ErrNotFound
 	}
-	return st, err
+	return s.stations[i], nil
 }
 
 func (s *Store) StationExists(ctx context.Context, id int64) (bool, error) {
-	var n int
-	err := s.read.QueryRowContext(ctx, `SELECT 1 FROM stations WHERE id = ?`, id).Scan(&n)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return err == nil, err
+	s.stationsMu.RLock()
+	defer s.stationsMu.RUnlock()
+	_, ok := s.stationIdx[id]
+	return ok, nil
 }
 
 // NearestStation is a station plus its Haversine distance from a query point.
@@ -432,28 +476,17 @@ type NearestStation struct {
 // FindNearestStation returns the station closest to the given WGS84 coordinates.
 // Distance is exact Haversine (km). Equal distances break ties by lower station ID.
 func (s *Store) FindNearestStation(ctx context.Context, lat, lon float64) (NearestStation, error) {
-	rows, err := s.read.QueryContext(ctx, `
-SELECT id, name, lat, lon, district_code FROM stations`)
-	if err != nil {
-		return NearestStation{}, err
-	}
-	defer rows.Close()
+	s.stationsMu.RLock()
+	defer s.stationsMu.RUnlock()
 
 	found := false
 	var best NearestStation
-	for rows.Next() {
-		var st model.Station
-		if err := rows.Scan(&st.ID, &st.Name, &st.Lat, &st.Lon, &st.DistrictCode); err != nil {
-			return NearestStation{}, err
-		}
+	for _, st := range s.stations {
 		d := haversineKm(lat, lon, st.Lat, st.Lon)
 		if !found || d < best.DistanceKm-1e-12 || (nearlyEqual(d, best.DistanceKm) && st.ID < best.Station.ID) {
 			best = NearestStation{Station: st, DistanceKm: d}
 			found = true
 		}
-	}
-	if err := rows.Err(); err != nil {
-		return NearestStation{}, err
 	}
 	if !found {
 		return NearestStation{}, ErrNotFound

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,6 +31,8 @@ type Server struct {
 	limiter    *routeLimiter
 	webURL     string
 	staleAfter time.Duration
+	docsSK     []byte
+	docsEN     []byte
 }
 
 func New(st *store.Store, syn *syncer.Syncer, cfg config.Config) *Server {
@@ -40,6 +43,8 @@ func New(st *store.Store, syn *syncer.Syncer, cfg config.Config) *Server {
 		limiter:    newRouteLimiter(cfg.RateLimit, cfg.RateLimitWindow),
 		webURL:     cfg.WebURL,
 		staleAfter: cfg.ForecastStaleAfter,
+		docsSK:     renderDocs(cfg.WebURL, false),
+		docsEN:     renderDocs(cfg.WebURL, true),
 	}
 	s.routes()
 	return s
@@ -56,6 +61,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /en/{$}", s.handleEnglishDocs)
 	s.mux.HandleFunc("GET /robots.txt", s.handleRobotsTxt)
 	s.mux.HandleFunc("GET /sitemap.xml", s.handleSitemap)
+	for path := range staticAssets {
+		s.mux.HandleFunc("GET "+path, s.handleStaticAsset)
+	}
 	s.mux.HandleFunc("GET /health", s.handleHealth)
 	s.mux.Handle("GET /metrics", metricsHandler())
 	s.mux.HandleFunc("GET /api/v1", s.handleAPIIndex)
@@ -81,8 +89,9 @@ func (s *Server) withMiddleware(next http.Handler) http.Handler {
 		}
 
 		route := routeBucketKey(r)
-		// Keep docs, health, and metrics scrapes unbounded.
-		if route != "GET /health" && route != "GET /metrics" && route != "GET /" && route != "GET /docs" && route != "GET /en" && route != "GET /robots.txt" && route != "GET /sitemap.xml" {
+		// Keep docs, icons, health, and metrics scrapes unbounded.
+		_, static := staticAssets[r.URL.Path]
+		if !static && route != "GET /health" && route != "GET /metrics" && route != "GET /" && route != "GET /docs" && route != "GET /en" && route != "GET /robots.txt" && route != "GET /sitemap.xml" {
 			key := clientIP(r) + "|" + route
 			ok, remaining, retryAfter := s.limiter.allow(key, time.Now())
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(s.limiter.limit))
@@ -250,24 +259,10 @@ func (s *Server) handleForecast(w http.ResponseWriter, r *http.Request) {
 			// Attach as a top-level extension via a wrapper map to avoid changing
 			// the stored ForecastResponse type used by station-ID cache hits.
 			payload := forecastWithMatch{ForecastResponse: resp, LocationMatch: res.Match}
-			etag := etagFor(payload)
-			if checkConditional(w, r, etag) {
-				return
-			}
-			w.Header().Set("ETag", etag)
-			w.Header().Set("Cache-Control", "public, max-age=300")
-			w.Header().Set("X-Cache", "STORE")
-			write(w, r, http.StatusOK, payload)
+			writeWithETag(w, r, payload, "public, max-age=300", "STORE")
 			return
 		}
-		etag := etagFor(resp)
-		if checkConditional(w, r, etag) {
-			return
-		}
-		w.Header().Set("ETag", etag)
-		w.Header().Set("Cache-Control", "public, max-age=300")
-		w.Header().Set("X-Cache", "STORE")
-		write(w, r, http.StatusOK, resp)
+		writeWithETag(w, r, resp, "public, max-age=300", "STORE")
 		return
 	}
 
@@ -298,13 +293,7 @@ type forecastWithMatch struct {
 
 func (s *Server) handleWeatherCodes(w http.ResponseWriter, r *http.Request) {
 	resp := model.WeatherCodesResponse{Codes: model.AllWeatherCodes()}
-	etag := etagFor(resp)
-	if checkConditional(w, r, etag) {
-		return
-	}
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=86400")
-	write(w, r, http.StatusOK, resp)
+	writeWithETag(w, r, resp, "public, max-age=86400", "")
 }
 
 func (s *Server) handleDailyForecast(w http.ResponseWriter, r *http.Request) {
@@ -342,14 +331,7 @@ func (s *Server) handleDailyForecast(w http.ResponseWriter, r *http.Request) {
 		resp.LocationMatch = res.Match
 	}
 
-	etag := etagFor(resp)
-	if checkConditional(w, r, etag) {
-		return
-	}
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	w.Header().Set("X-Cache", "STORE")
-	write(w, r, http.StatusOK, resp)
+	writeWithETag(w, r, resp, "public, max-age=300", "STORE")
 }
 
 func (s *Server) handleNow(w http.ResponseWriter, r *http.Request) {
@@ -379,14 +361,7 @@ func (s *Server) handleNow(w http.ResponseWriter, r *http.Request) {
 		resp.LocationMatch = res.Match
 	}
 
-	etag := etagFor(resp)
-	if checkConditional(w, r, etag) {
-		return
-	}
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=60")
-	w.Header().Set("X-Cache", "STORE")
-	write(w, r, http.StatusOK, resp)
+	writeWithETag(w, r, resp, "public, max-age=60", "STORE")
 }
 
 func (s *Server) handleIndicators(w http.ResponseWriter, r *http.Request) {
@@ -425,14 +400,7 @@ func (s *Server) handleIndicators(w http.ResponseWriter, r *http.Request) {
 		resp.LocationMatch = res.Match
 	}
 
-	etag := etagFor(resp)
-	if checkConditional(w, r, etag) {
-		return
-	}
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	w.Header().Set("X-Cache", "STORE")
-	write(w, r, http.StatusOK, resp)
+	writeWithETag(w, r, resp, "public, max-age=300", "STORE")
 }
 
 func (s *Server) loadHourlyForecast(r *http.Request, stationID int64) (model.ForecastResponse, store.CurrentForecast, error) {
@@ -708,11 +676,42 @@ func checkConditional(w http.ResponseWriter, r *http.Request, etag string) bool 
 	return false
 }
 
-func etagFor(v any) string {
-	b, err := json.Marshal(v)
+// writeWithETag encodes v once, derives the ETag from those bytes, and answers
+// 304 when the client already has them. xCache is sent only on full responses.
+func writeWithETag(w http.ResponseWriter, r *http.Request, v any, cacheControl, xCache string) {
+	body, err := encodeJSON(v)
 	if err != nil {
-		return ""
+		writeError(w, r, http.StatusInternalServerError, "failed to encode response")
+		return
 	}
+	// Hash without the encoder's trailing newline so ETags match the previous
+	// json.Marshal-based values for the same content.
+	etag := etagForBytes(bytes.TrimSuffix(body, []byte("\n")))
+	if checkConditional(w, r, etag) {
+		return
+	}
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Cache-Control", cacheControl)
+	if xCache != "" {
+		w.Header().Set("X-Cache", xCache)
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+// encodeJSON produces exactly the bytes write sends for v.
+func encodeJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func etagForBytes(b []byte) string {
 	sum := sha256.Sum256(b)
 	return `"` + hex.EncodeToString(sum[:16]) + `"`
 }
